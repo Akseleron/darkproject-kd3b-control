@@ -1,6 +1,12 @@
 //! Device orchestration and transport abstractions for KD3B.
 //! The initial repository baseline intentionally contains no real HID backend.
 
+mod mock;
+mod transport;
+
+pub use mock::{MockTransport, MockTransportError};
+pub use transport::{PacketTransport, write_direct_rgb};
+
 use kd3b_protocol::{USB_PRODUCT_ID, USB_VENDOR_ID};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
