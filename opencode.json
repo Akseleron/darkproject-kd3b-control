@@ -1,0 +1,47 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "docs/PROJECT_SPEC.md",
+    "docs/SAFETY.md",
+    "docs/DEVELOPMENT.md"
+  ],
+  "lsp": true,
+  "compaction": {
+    "auto": true,
+    "prune": false,
+    "reserved": 12000
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": {
+      "*": "ask",
+      "git status*": "allow",
+      "git diff*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git branch*": "allow",
+      "cargo fmt*": "allow",
+      "cargo check*": "allow",
+      "cargo clippy*": "allow",
+      "cargo test*": "allow",
+      "cargo build*": "allow",
+      "rg *": "allow",
+      "grep *": "allow",
+      "find *": "allow",
+      "ls *": "allow",
+      "cat *": "allow",
+      "head *": "allow",
+      "tail *": "allow",
+      "wc *": "allow",
+      "file *": "allow",
+      "sha256sum *": "allow",
+      "cargo run *": "ask",
+      "sudo *": "ask",
+      "rm *": "ask",
+      "chmod *": "ask",
+      "git commit *": "ask",
+      "git push *": "ask",
+      "gh *": "ask"
+    }
+  }
+}

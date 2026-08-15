@@ -1,0 +1,13 @@
+[package]
+name = "dpctl"
+version = "0.1.0"
+publish = false
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kd3b-device = { path = "../../crates/kd3b-device" }
+kd3b-protocol = { path = "../../crates/kd3b-protocol" }
+
+[lints]
+workspace = true

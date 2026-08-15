@@ -1,0 +1,27 @@
+/target/
+**/*.rs.bk
+.DS_Store
+.idea/
+.vscode/
+
+# Raw third-party/public research downloads are fetched locally.
+/captures/raw/*
+!/captures/raw/.gitkeep
+
+# Proprietary OEM binaries/resources must stay local.
+/research-local/
+/oem-local/
+*.exe
+*.dll
+*.msi
+*.bin
+*.fw
+
+# Temporary reverse-engineering outputs.
+*.pcap
+*.pcapng
+*.tmp
+*.log
+
+# OpenCode / Oh-My-OpenAgent runtime state
+.omo/
