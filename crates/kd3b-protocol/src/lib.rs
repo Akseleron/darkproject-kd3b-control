@@ -1,8 +1,10 @@
 //! Pure protocol definitions for Dark Project KD3B rev.2.
 //! Hardware I/O does not belong in this crate.
 
+pub mod direct_rgb;
 pub mod layout;
 
+pub use direct_rgb::{DirectRgbPackets, encode_direct_rgb};
 pub use layout::{ALL_KEYS, Key};
 
 pub const USB_VENDOR_ID: u16 = 0x195d;
