@@ -1,6 +1,10 @@
 //! Pure protocol definitions for Dark Project KD3B rev.2.
 //! Hardware I/O does not belong in this crate.
 
+pub mod layout;
+
+pub use layout::{ALL_KEYS, Key};
+
 pub const USB_VENDOR_ID: u16 = 0x195d;
 pub const USB_PRODUCT_ID: u16 = 0x2061;
 pub const LOGICAL_KEY_COUNT: usize = 87;
