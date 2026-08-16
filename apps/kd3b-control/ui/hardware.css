@@ -1,0 +1,125 @@
+.hardware-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hardware-state {
+  border: 1px solid #334158;
+  border-radius: 999px;
+  padding: 4px 7px;
+  color: #91a1b8;
+  background: #0c1118;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .09em;
+}
+
+.hardware-boundary[data-state="armed"] {
+  border-color: #36527a;
+  background: #101a29;
+}
+
+.hardware-boundary[data-state="armed"] .hardware-state {
+  border-color: #466997;
+  color: #a9c9f7;
+}
+
+.hardware-boundary[data-state="running"] {
+  border-color: #337253;
+  background: #0f1d18;
+  box-shadow: inset 0 0 24px rgba(67, 170, 117, .04);
+}
+
+.hardware-boundary[data-state="running"] .hardware-state {
+  border-color: #3f8a64;
+  color: #8de0af;
+  background: #10251b;
+}
+
+.hardware-boundary[data-state="error"] {
+  border-color: #763d48;
+  background: #211218;
+}
+
+.hardware-boundary[data-state="error"] .hardware-state {
+  border-color: #8b4652;
+  color: #ff9ca5;
+  background: #271116;
+}
+
+.hardware-stats {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 10px 0;
+  padding: 8px 9px;
+  border: 1px solid #222c39;
+  border-radius: 8px;
+  background: rgba(6, 9, 13, .35);
+  color: #78869a;
+  font-size: 9px;
+}
+
+.hardware-stats output {
+  color: #d6deea;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.hardware-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.hardware-boundary .hardware-button {
+  width: auto;
+  min-height: 34px;
+  border: 1px solid #344155;
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: #151b24;
+  color: #b7c1cf;
+  cursor: pointer;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.hardware-boundary .hardware-button:hover:not(:disabled) {
+  border-color: #52647e;
+  background: #1a222d;
+  color: #fff;
+}
+
+.hardware-boundary .hardware-button.primary {
+  border-color: #3d5f8e;
+  background: #17243a;
+  color: #b8d2fa;
+}
+
+.hardware-boundary .hardware-button.danger {
+  border-color: #593740;
+  background: #21151a;
+  color: #e7a8ae;
+}
+
+.hardware-boundary .hardware-button:disabled {
+  border-color: #272e38;
+  background: #14171c;
+  color: #505966;
+  cursor: not-allowed;
+  opacity: .72;
+}
+
+.hardware-footnote {
+  margin-bottom: 0 !important;
+  color: #67758a !important;
+}
+
+@media (max-width: 1180px) {
+  .hardware-actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
