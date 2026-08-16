@@ -43,7 +43,7 @@
         <div class="device-card-detail" id="device-detail">Читаем только HID metadata.</div>
       </section>
 
-      <div class="build-note">Preview build · hardware write disabled</div>
+      <div class="build-note">Development build · volatile RGB only</div>
     </aside>
 
     <main class="workspace">
@@ -77,7 +77,7 @@
           </div>
 
           <div class="preview-footer">
-            <span>Предпросмотр рассчитывается <code>kd3b-effects</code> и не открывает HID transport.</span>
+            <span>Предпросмотр рассчитывается <code>kd3b-effects</code>. HID transport открывается только после ручной разблокировки.</span>
             <span id="frame-status">Ожидание движка…</span>
           </div>
         </div>
@@ -141,10 +141,25 @@
               </div>
             </div>
 
-            <div class="hardware-boundary">
-              <strong>Запись в клавиатуру отключена</strong>
-              <p>Эта сборка показывает новый движок эффектов без дополнительных HID-записей. Аппаратный стриминг будет включён отдельным подтверждённым этапом.</p>
-              <button type="button" disabled>Применить к клавиатуре</button>
+            <div class="hardware-boundary" id="hardware-panel">
+              <div class="hardware-heading">
+                <strong id="hardware-title">Аппаратный вывод заблокирован</strong>
+                <span class="hardware-state" id="hardware-state">LOCKED</span>
+              </div>
+              <p id="hardware-detail">До разблокировки приложение не открывает HID transport для RGB-записи. Разблокировка действует только до закрытия приложения.</p>
+              <div class="hardware-stats">
+                <span>Кадров отправлено</span>
+                <output id="hardware-frames">0</output>
+              </div>
+              <div class="hardware-actions">
+                <button class="hardware-button primary" type="button" id="arm-hardware">Разблокировать RGB</button>
+                <button class="hardware-button" type="button" id="disarm-hardware" disabled>Заблокировать</button>
+                <button class="hardware-button primary" type="button" id="start-hardware" disabled>Запустить / обновить эффект</button>
+                <button class="hardware-button" type="button" id="stop-hardware" disabled>Остановить поток</button>
+                <button class="hardware-button" type="button" id="apply-frame" disabled>Применить текущий кадр один раз</button>
+                <button class="hardware-button danger" type="button" id="blackout-hardware" disabled>Погасить подсветку</button>
+              </div>
+              <p class="hardware-footnote">Поток ограничен 20 FPS, одинаковые последовательные кадры не отправляются. Используется только volatile Direct RGB: профили, EEPROM, remap, macro и firmware не затрагиваются.</p>
             </div>
           </section>
         </div>
@@ -152,12 +167,12 @@
 
       <section class="section" id="section-device">
         <div class="device-page-card">
-          <span class="panel-kicker">READ-ONLY STATUS</span>
+          <span class="panel-kicker">DEVICE STATUS</span>
           <h2>Подключение KD3B</h2>
           <div class="device-summary" id="device-summary"></div>
           <div class="boundary-note">
-            <strong>Что делает эта страница</strong>
-            <p>Только перечисляет HID metadata и проверяет однозначность interface 2. Открытие transport, чтение report и запись RGB здесь не выполняются.</p>
+            <strong>Граница аппаратного доступа</strong>
+            <p>Эта страница перечисляет HID metadata и проверяет однозначность interface 2. RGB transport открывается только командами раздела «Подсветка» после ручной разблокировки фразой ENABLE VOLATILE RGB.</p>
           </div>
         </div>
       </section>
