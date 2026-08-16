@@ -11,6 +11,15 @@ const state = {
   startedAt: performance.now(),
   previewInFlight: false,
   previewEnabled: true,
+  lastFrame: [],
+  deviceReady: false,
+  hardware: {
+    armed: false,
+    running: false,
+    framesWritten: 0,
+    detail: "Аппаратный вывод ещё не инициализирован.",
+    lastError: null,
+  },
 };
 
 const keyboard = document.querySelector("#keyboard");
@@ -24,9 +33,11 @@ const speed = document.querySelector("#speed");
 async function boot() {
   bindNavigation();
   bindControls();
+  bindHardwareControls();
   if (!invoke) {
     setDeviceFailure("Tauri IPC недоступен. Запусти desktop-приложение, а не index.html напрямую.");
     frameStatus.textContent = "Tauri IPC недоступен";
+    setHardwareError("Tauri IPC недоступен");
     return;
   }
 
@@ -38,9 +49,10 @@ async function boot() {
     state.layout = layout;
     renderKeyboard(layout);
     renderEffects(effects);
-    await refreshDevice();
+    await Promise.all([refreshDevice(), refreshHardwareStatus()]);
     state.startedAt = performance.now();
     previewLoop();
+    window.setInterval(refreshHardwareStatus, 500);
   } catch (error) {
     frameStatus.textContent = `Ошибка инициализации: ${String(error)}`;
   }
@@ -58,7 +70,10 @@ function bindNavigation() {
     });
   });
 
-  document.querySelector("#refresh-device").addEventListener("click", refreshDevice);
+  document.querySelector("#refresh-device").addEventListener("click", async () => {
+    await refreshDevice();
+    await refreshHardwareStatus();
+  });
 }
 
 function bindControls() {
@@ -87,6 +102,15 @@ function bindControls() {
   });
 }
 
+function bindHardwareControls() {
+  document.querySelector("#arm-hardware").addEventListener("click", armHardwareOutput);
+  document.querySelector("#disarm-hardware").addEventListener("click", disarmHardwareOutput);
+  document.querySelector("#start-hardware").addEventListener("click", startHardwareEffect);
+  document.querySelector("#stop-hardware").addEventListener("click", stopHardwareEffect);
+  document.querySelector("#apply-frame").addEventListener("click", applyCurrentFrame);
+  document.querySelector("#blackout-hardware").addEventListener("click", blackoutHardware);
+}
+
 async function refreshDevice() {
   const dot = document.querySelector("#device-dot");
   const title = document.querySelector("#device-title");
@@ -98,14 +122,18 @@ async function refreshDevice() {
   try {
     const status = await invoke("get_device_status");
     const ready = status.configurationState === "ready";
+    state.deviceReady = ready;
     dot.className = `status-dot ${ready ? "ready" : "blocked"}`;
     title.textContent = ready ? "KD3B подключена" : status.present ? "KD3B требует внимания" : "KD3B не найдена";
     detail.textContent = ready && status.selected
       ? `Interface ${status.selected.interfaceNumber} · ${status.selected.path}`
       : status.detail;
     renderDeviceSummary(status);
+    renderHardwareStatus(state.hardware);
   } catch (error) {
+    state.deviceReady = false;
     setDeviceFailure(String(error));
+    renderHardwareStatus(state.hardware);
   }
 }
 
@@ -180,23 +208,151 @@ async function updatePreview() {
     const elapsedSeconds = (performance.now() - state.startedAt) / 1000;
     const frame = await invoke("preview_effect", {
       request: {
-        kind: state.effect,
-        primary: state.primary,
-        secondary: state.secondary,
-        speed: state.speed,
-        brightnessPercent: state.brightness,
-        direction: state.direction,
+        ...effectRequest(),
         elapsedSeconds,
       },
     });
+    state.lastFrame = frame.colors;
     applyFrame(frame.colors);
     frameStatus.textContent = `${state.effect} · ${state.brightness}% · ${state.speed.toFixed(2)}×`;
+    renderHardwareStatus(state.hardware);
   } catch (error) {
     state.previewEnabled = false;
     frameStatus.textContent = `Preview остановлен: ${String(error)}`;
   } finally {
     state.previewInFlight = false;
   }
+}
+
+function effectRequest() {
+  return {
+    kind: state.effect,
+    primary: state.primary,
+    secondary: state.secondary,
+    speed: state.speed,
+    brightnessPercent: state.brightness,
+    direction: state.direction,
+  };
+}
+
+async function armHardwareOutput() {
+  const confirmation = window.prompt(
+    "Это разрешит volatile Direct RGB записи на interface 2 до закрытия приложения.\n\nВведите точно: ENABLE VOLATILE RGB",
+    "",
+  );
+  if (confirmation === null) return;
+
+  try {
+    const status = await invoke("arm_hardware_output", { confirmation });
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+async function disarmHardwareOutput() {
+  try {
+    const status = await invoke("disarm_hardware_output");
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+async function startHardwareEffect() {
+  try {
+    const status = await invoke("start_effect_output", { request: effectRequest() });
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+async function stopHardwareEffect() {
+  try {
+    const status = await invoke("stop_effect_output");
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+async function applyCurrentFrame() {
+  if (state.lastFrame.length !== state.layout.length) return;
+  try {
+    const status = await invoke("apply_static_frame", { colors: state.lastFrame });
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+async function blackoutHardware() {
+  if (!state.layout.length) return;
+  try {
+    const colors = Array(state.layout.length).fill("#000000");
+    const status = await invoke("apply_static_frame", { colors });
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+async function refreshHardwareStatus() {
+  if (!invoke) return;
+  try {
+    const status = await invoke("get_hardware_output_status");
+    renderHardwareStatus(status);
+  } catch (error) {
+    setHardwareError(String(error));
+  }
+}
+
+function renderHardwareStatus(status) {
+  state.hardware = status;
+  const title = document.querySelector("#hardware-title");
+  const stateLabel = document.querySelector("#hardware-state");
+  const detail = document.querySelector("#hardware-detail");
+  const panel = document.querySelector("#hardware-panel");
+
+  const hasError = Boolean(status.lastError);
+  if (hasError) {
+    title.textContent = "Ошибка аппаратного вывода";
+    stateLabel.textContent = "ERROR";
+    panel.dataset.state = "error";
+  } else if (status.running) {
+    title.textContent = "Эффект работает на клавиатуре";
+    stateLabel.textContent = "STREAMING";
+    panel.dataset.state = "running";
+  } else if (status.armed) {
+    title.textContent = "Аппаратный вывод разблокирован";
+    stateLabel.textContent = "ARMED";
+    panel.dataset.state = "armed";
+  } else {
+    title.textContent = "Аппаратный вывод заблокирован";
+    stateLabel.textContent = "LOCKED";
+    panel.dataset.state = "locked";
+  }
+
+  detail.textContent = status.lastError || status.detail || "Ожидание команды.";
+  document.querySelector("#hardware-frames").textContent = String(status.framesWritten ?? 0);
+
+  const canWrite = Boolean(status.armed && state.deviceReady);
+  document.querySelector("#arm-hardware").disabled = Boolean(status.armed);
+  document.querySelector("#disarm-hardware").disabled = !status.armed;
+  document.querySelector("#start-hardware").disabled = !canWrite;
+  document.querySelector("#stop-hardware").disabled = !status.running;
+  document.querySelector("#apply-frame").disabled = !canWrite || state.lastFrame.length !== state.layout.length;
+  document.querySelector("#blackout-hardware").disabled = !canWrite;
+}
+
+function setHardwareError(message) {
+  renderHardwareStatus({
+    ...state.hardware,
+    running: false,
+    detail: message,
+    lastError: message,
+  });
 }
 
 function applyFrame(colors) {
