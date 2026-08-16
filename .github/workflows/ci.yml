@@ -38,6 +38,9 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: JavaScript syntax
+        run: node --check apps/kd3b-control/ui/app.js
+
       - name: Format
         run: cargo fmt --all -- --check
 
