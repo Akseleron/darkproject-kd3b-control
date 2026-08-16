@@ -1,6 +1,7 @@
 //! Device orchestration and transport abstractions for KD3B.
 
 mod discovery;
+mod hid_transport;
 mod mock;
 mod probe;
 mod transport;
@@ -8,6 +9,10 @@ mod transport;
 pub use discovery::{
     BusType, DeviceDiscoveryError, DiscoveredHidInterface, enumerate_target_hid_interfaces,
     escape_hid_path, filter_target_interfaces,
+};
+pub use hid_transport::{
+    HidPacketTransport, HidPacketWriteError, OpenConfigurationInterfaceTransportError,
+    open_configuration_interface_transport,
 };
 pub use mock::{MockTransport, MockTransportError};
 pub use probe::{

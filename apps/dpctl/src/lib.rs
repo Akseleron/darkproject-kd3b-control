@@ -8,15 +8,17 @@ use kd3b_device::{
 };
 
 use devices_cli::render_interfaces;
+use info_cli::render_info;
 use probe_cli::ProbeSession;
 
 mod devices_cli;
+mod info_cli;
 mod probe_cli;
 #[cfg(test)]
 mod probe_cli_tests;
 
-const USAGE: &str = "Usage: dpctl <devices|probe>\n";
-const HELP: &str = "Usage: dpctl <devices|probe>\n\nCommands:\n  devices  Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  probe    Interactively prepare and open interface 2 without requesting HID report operations.\n";
+const USAGE: &str = "Usage: dpctl <devices|info|probe>\n";
+const HELP: &str = "Usage: dpctl <devices|info|probe>\n\nCommands:\n  devices  Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  info     Summarize current read-only target/interface status.\n  probe    Interactively prepare and open interface 2 without requesting HID report operations.\n";
 
 /// Complete process output for one `dpctl` invocation.
 #[derive(Debug, PartialEq, Eq)]
@@ -29,6 +31,7 @@ pub struct CommandOutput {
 enum Command {
     Help,
     Devices,
+    Info,
     Probe,
     UsageError(String),
 }
@@ -88,13 +91,22 @@ where
                     stderr: format!("error: could not render KD3B HID interfaces: {error}\n"),
                 },
             },
-            Err(error) => CommandOutput {
-                exit_code: 1,
-                stdout: String::new(),
-                stderr: format!(
-                    "error: could not enumerate KD3B HID interfaces: {error}\ndpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata.\n"
-                ),
+            Err(error) => discovery_failure(error),
+        },
+        Command::Info => match discover() {
+            Ok(interfaces) => match render_info(&interfaces) {
+                Ok(stdout) => CommandOutput {
+                    exit_code: 0,
+                    stdout,
+                    stderr: String::new(),
+                },
+                Err(error) => CommandOutput {
+                    exit_code: 1,
+                    stdout: String::new(),
+                    stderr: format!("error: could not render KD3B status: {error}\n"),
+                },
             },
+            Err(error) => discovery_failure(error),
         },
         Command::Probe => CommandOutput {
             exit_code: 2,
@@ -106,6 +118,16 @@ where
             stdout: String::new(),
             stderr: format!("error: {error}\n{USAGE}"),
         },
+    }
+}
+
+fn discovery_failure(error: impl fmt::Display) -> CommandOutput {
+    CommandOutput {
+        exit_code: 1,
+        stdout: String::new(),
+        stderr: format!(
+            "error: could not enumerate KD3B HID interfaces: {error}\ndpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata.\n"
+        ),
     }
 }
 
@@ -123,9 +145,14 @@ where
     match (command, arguments.next()) {
         ("--help" | "-h" | "help", None) => Command::Help,
         ("devices", None) => Command::Devices,
+        ("info", None) => Command::Info,
         ("probe", None) => Command::Probe,
         ("devices", Some(extra)) => Command::UsageError(format!(
             "unexpected argument '{}' after 'devices'",
+            extra.as_ref()
+        )),
+        ("info", Some(extra)) => Command::UsageError(format!(
+            "unexpected argument '{}' after 'info'",
             extra.as_ref()
         )),
         ("probe", Some(extra)) => Command::UsageError(format!(
@@ -145,14 +172,18 @@ mod tests {
     use super::{Command, HELP, parse_arguments, run_with_discovery};
 
     #[test]
-    fn probe_is_recognized_only_without_extra_arguments() {
+    fn info_and_probe_are_recognized_only_without_extra_arguments() {
         // Given / When
-        let command = parse_arguments(["probe"]);
-        let command_with_extra = parse_arguments(["probe", "extra"]);
+        let info = parse_arguments(["info"]);
+        let info_with_extra = parse_arguments(["info", "extra"]);
+        let probe = parse_arguments(["probe"]);
+        let probe_with_extra = parse_arguments(["probe", "extra"]);
 
         // Then
-        assert!(matches!(command, Command::Probe));
-        assert!(matches!(command_with_extra, Command::UsageError(_)));
+        assert!(matches!(info, Command::Info));
+        assert!(matches!(info_with_extra, Command::UsageError(_)));
+        assert!(matches!(probe, Command::Probe));
+        assert!(matches!(probe_with_extra, Command::UsageError(_)));
     }
 
     #[test]
@@ -181,23 +212,27 @@ mod tests {
         let cases: &[(&[&str], &str)] = &[
             (
                 &[],
-                "error: missing command\nUsage: dpctl <devices|probe>\n",
+                "error: missing command\nUsage: dpctl <devices|info|probe>\n",
             ),
             (
                 &["unknown"],
-                "error: unknown command 'unknown'\nUsage: dpctl <devices|probe>\n",
+                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe>\n",
             ),
             (
                 &["unknown", "extra"],
-                "error: unknown command 'unknown'\nUsage: dpctl <devices|probe>\n",
+                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe>\n",
             ),
             (
                 &["devices", "extra"],
-                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|probe>\n",
+                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|info|probe>\n",
+            ),
+            (
+                &["info", "extra"],
+                "error: unexpected argument 'extra' after 'info'\nUsage: dpctl <devices|info|probe>\n",
             ),
             (
                 &["probe", "extra"],
-                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|probe>\n",
+                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|info|probe>\n",
             ),
         ];
 
@@ -229,6 +264,26 @@ mod tests {
         // Then
         assert_eq!(output.exit_code, 0);
         assert_eq!(output.stdout, expected);
+        assert_eq!(output.stderr, "");
+    }
+
+    #[test]
+    fn info_reports_current_unique_candidate_without_opening_it() {
+        // Given
+        let interfaces = vec![
+            interface(0, "1-11:1.0"),
+            interface(1, "1-11:1.1"),
+            interface(2, "1-11:1.2"),
+        ];
+
+        // When
+        let output = run_with_discovery(["info"], || Ok::<_, &str>(interfaces));
+
+        // Then
+        assert_eq!(output.exit_code, 0);
+        assert!(output.stdout.contains("Matching HID interfaces: 3\n"));
+        assert!(output.stdout.contains("Configuration interface selection: unique\n"));
+        assert!(output.stdout.contains("Interface: 2\nPath: 1-11:1.2\n"));
         assert_eq!(output.stderr, "");
     }
 
@@ -301,5 +356,19 @@ mod tests {
                 "dpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata."
             )
         );
+    }
+
+    fn interface(number: i32, path: &str) -> DiscoveredHidInterface {
+        DiscoveredHidInterface {
+            interface_number: number,
+            vendor_id: 0x195d,
+            product_id: 0x2061,
+            product_string: Some("Turing Gaming Keyboard".to_owned()),
+            manufacturer_string: Some("Turing Gaming Keyboard".to_owned()),
+            serial_number: None,
+            release_number: 0x3131,
+            bus_type: BusType::Usb,
+            path: path.to_owned(),
+        }
     }
 }
