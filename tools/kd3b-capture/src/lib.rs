@@ -168,9 +168,9 @@ pub fn parse_pcapng(bytes: &[u8]) -> Result<PcapNgCapture, ParseError> {
                 "packet capture does not start with a section header",
             )
         })?;
-        let section_index = state.section_index.ok_or_else(|| {
-            ParseError::new(offset, "capture parser has no active section index")
-        })?;
+        let section_index = state
+            .section_index
+            .ok_or_else(|| ParseError::new(offset, "capture parser has no active section index"))?;
         let block_type = endianness.read_u32(raw_type);
         let total_length = block_length(bytes, offset, endianness)?;
         validate_block(bytes, offset, total_length, endianness)?;
