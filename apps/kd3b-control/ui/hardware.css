@@ -8,10 +8,10 @@
 .hardware-state {
   border: 1px solid #334158;
   border-radius: 999px;
-  padding: 4px 7px;
-  color: #91a1b8;
+  padding: 5px 8px;
+  color: #9eacc0;
   background: #0c1118;
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 800;
   letter-spacing: .09em;
 }
@@ -53,37 +53,37 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin: 10px 0;
-  padding: 8px 9px;
+  margin: 11px 0;
+  padding: 10px 11px;
   border: 1px solid #222c39;
   border-radius: 8px;
   background: rgba(6, 9, 13, .35);
-  color: #78869a;
-  font-size: 9px;
+  color: #8c9aaf;
+  font-size: 11px;
 }
 
 .hardware-stats output {
   color: #d6deea;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .hardware-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 7px;
+  gap: 8px;
 }
 
 .hardware-boundary .hardware-button {
   width: auto;
-  min-height: 34px;
+  min-height: 40px;
   border: 1px solid #344155;
   border-radius: 8px;
-  padding: 7px 9px;
+  padding: 9px 11px;
   background: #151b24;
-  color: #b7c1cf;
+  color: #c4ccd8;
   cursor: pointer;
-  font-size: 9px;
+  font-size: 12px;
   line-height: 1.25;
 }
 
@@ -96,7 +96,7 @@
 .hardware-boundary .hardware-button.primary {
   border-color: #3d5f8e;
   background: #17243a;
-  color: #b8d2fa;
+  color: #c4d9fa;
 }
 
 .hardware-boundary .hardware-button.danger {
@@ -108,18 +108,19 @@
 .hardware-boundary .hardware-button:disabled {
   border-color: #272e38;
   background: #14171c;
-  color: #505966;
+  color: #697381;
   cursor: not-allowed;
-  opacity: .72;
+  opacity: .78;
 }
 
 .hardware-footnote {
   margin-bottom: 0 !important;
-  color: #67758a !important;
+  color: #7b899e !important;
+  font-size: 10.5px !important;
 }
 
 @media (max-width: 1180px) {
   .hardware-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
