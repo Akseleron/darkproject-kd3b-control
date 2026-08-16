@@ -1,11 +1,22 @@
-use std::fmt::{self, Write as _};
+use std::{
+    fmt,
+    io::{self, IsTerminal},
+};
 
-use kd3b_device::{DiscoveredHidInterface, enumerate_target_hid_interfaces};
+use kd3b_device::{
+    DiscoveredHidInterface, enumerate_target_hid_interfaces, prepare_configuration_interface_probe,
+};
 
-const USAGE: &str = "Usage: dpctl devices\n";
-const HELP: &str = "Usage: dpctl devices\n\nEnumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n";
-const TARGET_HEADER: &str = "Target: Dark Project KD3B rev.2 (VID:PID 195d:2061)\n";
-const CANDIDATE: &str = "unvalidated configuration-interface candidate; not opened by dpctl; transport/writability not validated";
+use devices_cli::render_interfaces;
+use probe_cli::ProbeSession;
+
+mod devices_cli;
+mod probe_cli;
+#[cfg(test)]
+mod probe_cli_tests;
+
+const USAGE: &str = "Usage: dpctl <devices|probe>\n";
+const HELP: &str = "Usage: dpctl <devices|probe>\n\nCommands:\n  devices  Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  probe    Interactively prepare and open interface 2 without requesting HID report operations.\n";
 
 /// Complete process output for one `dpctl` invocation.
 #[derive(Debug, PartialEq, Eq)]
@@ -18,6 +29,7 @@ pub struct CommandOutput {
 enum Command {
     Help,
     Devices,
+    Probe,
     UsageError(String),
 }
 
@@ -27,7 +39,18 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
-    run_with_discovery(arguments, enumerate_target_hid_interfaces)
+    match parse_arguments(arguments) {
+        Command::Probe => {
+            let stdin = io::stdin();
+            let is_interactive_stdin = stdin.is_terminal();
+            let mut input = stdin.lock();
+            let stdout = io::stdout();
+            let mut output = stdout.lock();
+            ProbeSession::new(&mut input, &mut output, is_interactive_stdin)
+                .run(prepare_configuration_interface_probe)
+        }
+        command => run_non_probe(command, enumerate_target_hid_interfaces),
+    }
 }
 
 /// Dispatches arguments with an injected metadata enumerator for offline callers and tests.
@@ -38,7 +61,15 @@ where
     F: FnOnce() -> Result<Vec<DiscoveredHidInterface>, E>,
     E: fmt::Display,
 {
-    match parse_arguments(arguments) {
+    run_non_probe(parse_arguments(arguments), discover)
+}
+
+fn run_non_probe<F, E>(command: Command, discover: F) -> CommandOutput
+where
+    F: FnOnce() -> Result<Vec<DiscoveredHidInterface>, E>,
+    E: fmt::Display,
+{
+    match command {
         Command::Help => CommandOutput {
             exit_code: 0,
             stdout: HELP.to_owned(),
@@ -61,9 +92,14 @@ where
                 exit_code: 1,
                 stdout: String::new(),
                 stderr: format!(
-                    "error: could not enumerate KD3B HID interfaces: {error}\nNo HID device handle was opened by dpctl and no read/write/report operation was requested.\n"
+                    "error: could not enumerate KD3B HID interfaces: {error}\ndpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata.\n"
                 ),
             },
+        },
+        Command::Probe => CommandOutput {
+            exit_code: 2,
+            stdout: String::new(),
+            stderr: format!("error: probe requires the interactive dispatcher\n{USAGE}"),
         },
         Command::UsageError(error) => CommandOutput {
             exit_code: 2,
@@ -87,56 +123,17 @@ where
     match (command, arguments.next()) {
         ("--help" | "-h" | "help", None) => Command::Help,
         ("devices", None) => Command::Devices,
+        ("probe", None) => Command::Probe,
         ("devices", Some(extra)) => Command::UsageError(format!(
             "unexpected argument '{}' after 'devices'",
             extra.as_ref()
         )),
+        ("probe", Some(extra)) => Command::UsageError(format!(
+            "unexpected argument '{}' after 'probe'",
+            extra.as_ref()
+        )),
         (unknown, _) => Command::UsageError(format!("unknown command '{unknown}'")),
     }
-}
-
-fn render_interfaces(interfaces: &[DiscoveredHidInterface]) -> Result<String, fmt::Error> {
-    let mut output = format!("{TARGET_HEADER}Matches: {}\n", interfaces.len());
-    if interfaces.is_empty() {
-        output.push_str("No matching HID interfaces found.\n");
-        return Ok(output);
-    }
-
-    for interface in interfaces {
-        let interface_suffix = match interface.interface_number {
-            -1 => " (not reported)",
-            _ => "",
-        };
-        let candidate = if interface.is_unvalidated_configuration_interface_candidate() {
-            CANDIDATE
-        } else {
-            "none"
-        };
-        writeln!(
-            output,
-            "Interface: {}{interface_suffix}\nVID:PID: {:04x}:{:04x}\nProduct: {}\nManufacturer: {}\nSerial: {}\nRelease: 0x{:04x}\nBus: {}\nPath: {}\nCandidate: {candidate}",
-            interface.interface_number,
-            interface.vendor_id,
-            interface.product_id,
-            interface
-                .product_string
-                .as_deref()
-                .unwrap_or("<unavailable>"),
-            interface
-                .manufacturer_string
-                .as_deref()
-                .unwrap_or("<unavailable>"),
-            interface
-                .serial_number
-                .as_deref()
-                .unwrap_or("<unavailable>"),
-            interface.release_number,
-            interface.bus_type,
-            interface.path,
-        )?;
-    }
-
-    Ok(output)
 }
 
 #[cfg(test)]
@@ -145,7 +142,18 @@ mod tests {
 
     use kd3b_device::{BusType, DiscoveredHidInterface};
 
-    use super::{HELP, run_with_discovery};
+    use super::{Command, HELP, parse_arguments, run_with_discovery};
+
+    #[test]
+    fn probe_is_recognized_only_without_extra_arguments() {
+        // Given / When
+        let command = parse_arguments(["probe"]);
+        let command_with_extra = parse_arguments(["probe", "extra"]);
+
+        // Then
+        assert!(matches!(command, Command::Probe));
+        assert!(matches!(command_with_extra, Command::UsageError(_)));
+    }
 
     #[test]
     fn help_succeeds_without_discovery_when_help_form_is_used() {
@@ -171,18 +179,25 @@ mod tests {
     fn usage_fails_without_discovery_when_arguments_are_invalid() {
         // Given
         let cases: &[(&[&str], &str)] = &[
-            (&[], "error: missing command\nUsage: dpctl devices\n"),
+            (
+                &[],
+                "error: missing command\nUsage: dpctl <devices|probe>\n",
+            ),
             (
                 &["unknown"],
-                "error: unknown command 'unknown'\nUsage: dpctl devices\n",
+                "error: unknown command 'unknown'\nUsage: dpctl <devices|probe>\n",
             ),
             (
                 &["unknown", "extra"],
-                "error: unknown command 'unknown'\nUsage: dpctl devices\n",
+                "error: unknown command 'unknown'\nUsage: dpctl <devices|probe>\n",
             ),
             (
                 &["devices", "extra"],
-                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl devices\n",
+                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|probe>\n",
+            ),
+            (
+                &["probe", "extra"],
+                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|probe>\n",
             ),
         ];
 
@@ -248,7 +263,7 @@ mod tests {
             "Target: Dark Project KD3B rev.2 (VID:PID 195d:2061)\nMatches: 2\n",
             "Interface: 2\nVID:PID: 195d:2061\nProduct: Turing Gaming Keyboard\n",
             "Manufacturer: <unavailable>\nSerial: serial-a\nRelease: 0x010a\nBus: usb\n",
-            "Path: /dev/hidraw2\nCandidate: unvalidated configuration-interface candidate; not opened by dpctl; transport/writability not validated\n",
+            "Path: /dev/hidraw2\nCandidate: unvalidated configuration-interface candidate; no application-level HID handle/report request by dpctl; HIDAPI/libusb may open visible HID devices for metadata; transport/writability not validated\n",
             "Interface: -1 (not reported)\nVID:PID: 195d:2061\nProduct: <unavailable>\n",
             "Manufacturer: Dark Project\nSerial: <unavailable>\nRelease: 0x0000\nBus: bluetooth\n",
             "Path: /safe\\path\\x1b\nCandidate: none\n",
@@ -268,7 +283,7 @@ mod tests {
         // Given
         let expected = concat!(
             "error: could not enumerate KD3B HID interfaces: test enumeration failure\n",
-            "No HID device handle was opened by dpctl and no read/write/report operation was requested.\n",
+            "dpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata.\n",
         );
 
         // When
@@ -283,7 +298,7 @@ mod tests {
         assert_eq!(
             output.stderr.lines().nth(1),
             Some(
-                "No HID device handle was opened by dpctl and no read/write/report operation was requested."
+                "dpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata."
             )
         );
     }

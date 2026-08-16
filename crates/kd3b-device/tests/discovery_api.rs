@@ -130,6 +130,11 @@ fn discovery_record_preserves_optional_and_numeric_metadata() {
     assert_eq!(interface.manufacturer_string, None);
     assert_eq!(interface.serial_number, None);
     assert_eq!(interface.release_number, 0x00af_u16);
+    assert_eq!(interface.interface_number, 2);
+    assert_eq!(interface.vendor_id, 0x195d);
+    assert_eq!(interface.product_id, 0x2061);
+    assert_eq!(interface.bus_type, BusType::Unknown);
+    assert_eq!(interface.path, "/dev/synthetic");
 }
 
 #[test]
