@@ -13,5 +13,10 @@ path = "src/lib.rs"
 name = "kd3b-capture"
 path = "src/main.rs"
 
-[lints]
-workspace = true
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+pedantic = "warn"
+manual_is_multiple_of = "allow"
