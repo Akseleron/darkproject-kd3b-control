@@ -7,8 +7,6 @@
   const canvas = document.createElement("canvas");
   canvas.className = "keyboard-color-canvas";
   canvas.setAttribute("aria-hidden", "true");
-  keyboard.prepend(canvas);
-  keyboard.classList.add("canvas-preview");
 
   const context = canvas.getContext("2d", { alpha: true });
   let keyRects = [];
@@ -23,6 +21,13 @@
   let renderWindowStartedAt = performance.now();
   let measuredDisplayFps = 0;
   let measuredRenderFps = 0;
+
+  function ensureCanvasAttached() {
+    if (canvas.parentElement !== keyboard) {
+      keyboard.prepend(canvas);
+    }
+    keyboard.classList.add("canvas-preview");
+  }
 
   function roundedRectPath(ctx, x, y, width, height, radius) {
     const r = Math.max(0, Math.min(radius, width / 2, height / 2));
@@ -41,6 +46,7 @@
 
   function syncCanvasGeometry() {
     if (!context) return;
+    ensureCanvasAttached();
 
     const bounds = keyboard.getBoundingClientRect();
     if (bounds.width <= 0 || bounds.height <= 0) return;
@@ -77,6 +83,7 @@
 
   function ensureGeometry(colors) {
     if (
+      canvas.parentElement !== keyboard ||
       keyRects.length !== colors.length ||
       geometryClientWidth !== keyboard.clientWidth ||
       geometryClientHeight !== keyboard.clientHeight
@@ -88,7 +95,7 @@
   function paintFrame(colors, countFrame = true, geometryAlreadySynced = false) {
     if (!context || !colors.length) return;
     if (!geometryAlreadySynced) ensureGeometry(colors);
-    if (keyRects.length !== colors.length) return;
+    if (keyRects.length !== colors.length || canvas.parentElement !== keyboard) return;
 
     context.clearRect(0, 0, geometryWidth, geometryHeight);
     for (let index = 0; index < colors.length; index += 1) {
