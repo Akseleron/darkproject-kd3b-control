@@ -14,6 +14,8 @@
   let keyRects = [];
   let geometryWidth = 0;
   let geometryHeight = 0;
+  let geometryClientWidth = 0;
+  let geometryClientHeight = 0;
   let lastStatusAt = 0;
   let displayFrames = 0;
   let displayWindowStartedAt = performance.now();
@@ -55,6 +57,8 @@
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     geometryWidth = bounds.width;
     geometryHeight = bounds.height;
+    geometryClientWidth = keyboard.clientWidth;
+    geometryClientHeight = keyboard.clientHeight;
     keyRects = state.keyElements.map((element) => {
       if (!element) return null;
       const rect = element.getBoundingClientRect();
@@ -67,23 +71,23 @@
     });
 
     if (state.lastFrame.length === state.layout.length) {
-      paintFrame(state.lastFrame, false);
+      paintFrame(state.lastFrame, false, true);
     }
   }
 
   function ensureGeometry(colors) {
     if (
       keyRects.length !== colors.length ||
-      geometryWidth !== keyboard.clientWidth ||
-      geometryHeight !== keyboard.clientHeight
+      geometryClientWidth !== keyboard.clientWidth ||
+      geometryClientHeight !== keyboard.clientHeight
     ) {
       syncCanvasGeometry();
     }
   }
 
-  function paintFrame(colors, countFrame = true) {
+  function paintFrame(colors, countFrame = true, geometryAlreadySynced = false) {
     if (!context || !colors.length) return;
-    ensureGeometry(colors);
+    if (!geometryAlreadySynced) ensureGeometry(colors);
     if (keyRects.length !== colors.length) return;
 
     context.clearRect(0, 0, geometryWidth, geometryHeight);
