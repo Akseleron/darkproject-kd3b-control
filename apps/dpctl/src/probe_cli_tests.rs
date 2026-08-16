@@ -159,8 +159,8 @@ mod tests {
         let input_session = ProbeSession::new(&mut failing_input, &mut output, true);
 
         // When
-        let input_result = input_session
-            .run(|| Ok::<_, SyntheticError>(fake_probe(&input_open_calls)));
+        let input_result =
+            input_session.run(|| Ok::<_, SyntheticError>(fake_probe(&input_open_calls)));
 
         // Then
         assert_eq!(input_result.exit_code, 1);
@@ -173,8 +173,8 @@ mod tests {
         let output_session = ProbeSession::new(&mut input, &mut failing_output, true);
 
         // When
-        let output_result = output_session
-            .run(|| Ok::<_, SyntheticError>(fake_probe(&output_open_calls)));
+        let output_result =
+            output_session.run(|| Ok::<_, SyntheticError>(fake_probe(&output_open_calls)));
 
         // Then
         assert_eq!(output_result.exit_code, 1);
