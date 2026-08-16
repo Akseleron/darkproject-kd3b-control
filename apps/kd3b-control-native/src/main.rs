@@ -80,9 +80,7 @@ impl NativeApp {
                 self.measured_update_hz, self.device_summary
             )));
 
-        let preview = canvas(self)
-            .width(Fill)
-            .height(Length::Fixed(390.0));
+        let preview = canvas(self).width(Fill).height(Length::Fixed(390.0));
 
         let mut content = Column::new()
             .spacing(18)
@@ -95,7 +93,7 @@ impl NativeApp {
                 container(
                     Column::new()
                         .spacing(8)
-                        .push(text(format!("Панель прокрутки {index}" )).size(20))
+                        .push(text(format!("Панель прокрутки {index}")).size(20))
                         .push(text(
                             "Эти блоки намеренно создают длинную страницу. Активно прокручивай её, пока RGB-preview продолжает обновляться.",
                         )),
