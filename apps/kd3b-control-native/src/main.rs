@@ -84,7 +84,9 @@ impl NativeApp {
                 self.measured_update_hz, self.device_summary
             )));
 
-        let preview = canvas(self).width(Fill).height(Length::Fixed(390.0));
+        let preview = iced::widget::canvas(self)
+            .width(Fill)
+            .height(Length::Fixed(390.0));
 
         let mut content = Column::new()
             .spacing(18)
