@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 use iced::mouse;
 use iced::time;
 use iced::widget::canvas::{self, Geometry, Path};
-use iced::widget::{Column, canvas, container, scrollable, text};
+use iced::widget::{Column, container, scrollable, text};
 use iced::{Color, Element, Fill, Length, Point, Rectangle, Renderer, Size, Subscription, Theme};
 use kd3b_device::{enumerate_target_hid_interfaces, select_configuration_interface};
 use kd3b_effects::{EffectConfig, EffectKind, Frame, FrameContext, key_position, render};
@@ -15,7 +15,7 @@ const METRIC_WINDOW: Duration = Duration::from_millis(750);
 pub fn main() -> iced::Result {
     iced::application(NativeApp::new, NativeApp::update, NativeApp::view)
         .subscription(NativeApp::subscription)
-        .theme(|_| Theme::Dark)
+        .theme(NativeApp::theme)
         .run()
 }
 
@@ -69,6 +69,10 @@ impl NativeApp {
 
     fn subscription(&self) -> Subscription<Message> {
         time::every(FRAME_INTERVAL).map(Message::Tick)
+    }
+
+    fn theme(&self) -> Theme {
+        Theme::Dark
     }
 
     fn view(&self) -> Element<'_, Message> {
