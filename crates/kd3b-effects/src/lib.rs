@@ -228,17 +228,8 @@ fn render_rain(config: &EffectConfig, key: Key, position: KeyPosition, phase: f3
     let head_y = local * 1.45 - 0.2;
     let distance = (position.y - head_y).abs();
     let trail = pulse(distance, 0.22);
-    let twinkle = 0.65
-        + 0.35
-            * unit_hash(
-                config.seed ^ 0xa55a,
-                u64::from(key.offset()),
-                epoch_key,
-            );
-    scale_color(
-        mix(config.primary, config.secondary, 0.22),
-        trail * twinkle,
-    )
+    let twinkle = 0.65 + 0.35 * unit_hash(config.seed ^ 0xa55a, u64::from(key.offset()), epoch_key);
+    scale_color(mix(config.primary, config.secondary, 0.22), trail * twinkle)
 }
 
 fn render_fire(config: &EffectConfig, key: Key, position: KeyPosition, phase: f32) -> Rgb8 {
@@ -305,10 +296,9 @@ fn mix(left: Rgb8, right: Rgb8, amount: f32) -> Rgb8 {
 }
 
 fn mix_channel(left: u8, right: u8, left_level: u8, right_level: u8) -> u8 {
-    let mixed = (u16::from(left) * u16::from(left_level)
-        + u16::from(right) * u16::from(right_level)
-        + 127)
-        / 255;
+    let mixed =
+        (u16::from(left) * u16::from(left_level) + u16::from(right) * u16::from(right_level) + 127)
+            / 255;
     u8::try_from(mixed).unwrap_or(u8::MAX)
 }
 
@@ -317,27 +307,15 @@ fn rainbow(hue: f32) -> Rgb8 {
     if hue < 1.0 {
         Rgb8::new(255, scale_channel(255, quantize_unit(hue)), 0)
     } else if hue < 2.0 {
-        Rgb8::new(
-            scale_channel(255, quantize_unit(2.0 - hue)),
-            255,
-            0,
-        )
+        Rgb8::new(scale_channel(255, quantize_unit(2.0 - hue)), 255, 0)
     } else if hue < 3.0 {
         Rgb8::new(0, 255, scale_channel(255, quantize_unit(hue - 2.0)))
     } else if hue < 4.0 {
-        Rgb8::new(
-            0,
-            scale_channel(255, quantize_unit(4.0 - hue)),
-            255,
-        )
+        Rgb8::new(0, scale_channel(255, quantize_unit(4.0 - hue)), 255)
     } else if hue < 5.0 {
         Rgb8::new(scale_channel(255, quantize_unit(hue - 4.0)), 0, 255)
     } else {
-        Rgb8::new(
-            255,
-            0,
-            scale_channel(255, quantize_unit(6.0 - hue)),
-        )
+        Rgb8::new(255, 0, scale_channel(255, quantize_unit(6.0 - hue)))
     }
 }
 
