@@ -1,7 +1,12 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
+const PREVIEW_INTERVAL_MS = 80;
+const SCROLL_COOLDOWN_MS = 140;
+const HARDWARE_STATUS_INTERVAL_MS = 1000;
+
 const state = {
   layout: [],
+  keyElements: [],
   effect: "wave",
   primary: "#4080ff",
   secondary: "#ff3000",
@@ -11,6 +16,9 @@ const state = {
   startedAt: performance.now(),
   previewInFlight: false,
   previewEnabled: true,
+  previewLastAt: 0,
+  scrollPauseUntil: 0,
+  activeSection: "lighting",
   lastFrame: [],
   deviceReady: false,
   hardware: {
@@ -29,11 +37,15 @@ const primary = document.querySelector("#primary-color");
 const secondary = document.querySelector("#secondary-color");
 const brightness = document.querySelector("#brightness");
 const speed = document.querySelector("#speed");
+const workspace = document.querySelector(".workspace");
+
+const VISUAL_LAYOUT = buildVisualLayout();
 
 async function boot() {
   bindNavigation();
   bindControls();
   bindHardwareControls();
+  bindPerformanceGuards();
   if (!invoke) {
     setDeviceFailure("Tauri IPC недоступен. Запусти desktop-приложение, а не index.html напрямую.");
     frameStatus.textContent = "Tauri IPC недоступен";
@@ -51,8 +63,8 @@ async function boot() {
     renderEffects(effects);
     await Promise.all([refreshDevice(), refreshHardwareStatus()]);
     state.startedAt = performance.now();
-    previewLoop();
-    window.setInterval(refreshHardwareStatus, 500);
+    window.requestAnimationFrame(previewLoop);
+    window.setInterval(refreshHardwareStatus, HARDWARE_STATUS_INTERVAL_MS);
   } catch (error) {
     frameStatus.textContent = `Ошибка инициализации: ${String(error)}`;
   }
@@ -64,6 +76,7 @@ function bindNavigation() {
       document.querySelectorAll(".nav-item[data-section]").forEach((item) => item.classList.remove("active"));
       button.classList.add("active");
       const section = button.dataset.section;
+      state.activeSection = section;
       document.querySelectorAll(".section").forEach((item) => item.classList.remove("active"));
       document.querySelector(`#section-${section}`)?.classList.add("active");
       document.querySelector("#page-title").textContent = section === "device" ? "Устройство" : "Подсветка";
@@ -74,6 +87,12 @@ function bindNavigation() {
     await refreshDevice();
     await refreshHardwareStatus();
   });
+}
+
+function bindPerformanceGuards() {
+  workspace?.addEventListener("scroll", () => {
+    state.scrollPauseUntil = performance.now() + SCROLL_COOLDOWN_MS;
+  }, { passive: true });
 }
 
 function bindControls() {
@@ -163,19 +182,32 @@ function renderDeviceSummary(status) {
 
 function renderKeyboard(layout) {
   keyboard.replaceChildren();
+  state.keyElements = Array(layout.length);
   const fragment = document.createDocumentFragment();
+
   for (const key of layout) {
     const element = document.createElement("div");
+    const geometry = VISUAL_LAYOUT.get(key.name);
     element.className = "key";
     element.dataset.index = String(key.index);
-    element.style.gridColumn = String(key.column + 1);
-    element.style.gridRow = String(key.row + 1);
+    element.dataset.name = key.name;
+
+    if (geometry) {
+      element.style.gridColumn = `${geometry.start} / span ${geometry.span}`;
+      element.style.gridRow = String(geometry.row);
+    } else {
+      element.style.gridColumn = `${key.column * 4 + 1} / span 4`;
+      element.style.gridRow = String(key.row + 1);
+    }
+
     element.title = key.name;
     const label = document.createElement("span");
     label.textContent = keyLabel(key.name);
     element.append(label);
+    state.keyElements[key.index] = element;
     fragment.append(element);
   }
+
   keyboard.append(fragment);
 }
 
@@ -197,8 +229,20 @@ function renderEffects(effects) {
   }
 }
 
-function previewLoop() {
-  window.setInterval(updatePreview, 50);
+function previewLoop(timestamp) {
+  window.requestAnimationFrame(previewLoop);
+
+  if (
+    document.hidden ||
+    state.activeSection !== "lighting" ||
+    timestamp < state.scrollPauseUntil ||
+    timestamp - state.previewLastAt < PREVIEW_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  state.previewLastAt = timestamp;
+  void updatePreview();
 }
 
 async function updatePreview() {
@@ -215,7 +259,6 @@ async function updatePreview() {
     state.lastFrame = frame.colors;
     applyFrame(frame.colors);
     frameStatus.textContent = `${state.effect} · ${state.brightness}% · ${state.speed.toFixed(2)}×`;
-    renderHardwareStatus(state.hardware);
   } catch (error) {
     state.previewEnabled = false;
     frameStatus.textContent = `Preview остановлен: ${String(error)}`;
@@ -357,23 +400,57 @@ function setHardwareError(message) {
 
 function applyFrame(colors) {
   colors.forEach((color, index) => {
-    const key = keyboard.querySelector(`[data-index="${index}"]`);
-    if (!key) return;
+    const key = state.keyElements[index];
+    if (!key || key.dataset.color === color) return;
+    key.dataset.color = color;
     key.style.backgroundColor = color;
-    key.style.borderColor = tint(color, 0.25);
-    key.style.boxShadow = `inset 0 -2px 0 rgba(0,0,0,.28), 0 0 11px ${withAlpha(color, 0.22)}`;
   });
+}
+
+function buildVisualLayout() {
+  const map = new Map();
+  const add = (row, x, width, names) => {
+    names.forEach((name, index) => {
+      const startX = Array.isArray(x) ? x[index] : x + index;
+      const keyWidth = Array.isArray(width) ? width[index] : width;
+      map.set(name, {
+        row,
+        start: Math.round(startX * 4) + 1,
+        span: Math.round(keyWidth * 4),
+      });
+    });
+  };
+
+  add(1, [0, 2, 3, 4, 5, 6.5, 7.5, 8.5, 9.5, 11, 12, 13, 14, 15.5, 16.5, 17.5], 1,
+    ["Esc", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "PrintScreen", "ScrollLock", "Pause"]);
+  add(2, 0, 1, ["Backtick", "Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9", "Digit0", "Minus", "Equal"]);
+  add(2, [13, 15.5, 16.5, 17.5], [2, 1, 1, 1], ["Backspace", "Insert", "Home", "PageUp"]);
+  add(3, [0, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 9.5, 10.5, 11.5, 12.5, 13.5, 15.5, 16.5, 17.5],
+    [1.5, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.5, 1, 1, 1],
+    ["Tab", "Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P", "LeftBracket", "RightBracket", "Backslash", "Delete", "End", "PageDown"]);
+  add(4, [0, 1.75, 2.75, 3.75, 4.75, 5.75, 6.75, 7.75, 8.75, 9.75, 10.75, 11.75, 12.75],
+    [1.75, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2.25],
+    ["CapsLock", "A", "S", "D", "F", "G", "H", "J", "K", "L", "Semicolon", "Quote", "Enter"]);
+  add(5, [0, 2.25, 3.25, 4.25, 5.25, 6.25, 7.25, 8.25, 9.25, 10.25, 11.25, 16.5],
+    [2.25, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2.75, 1],
+    ["LeftShift", "Z", "X", "C", "V", "B", "N", "M", "Comma", "Period", "RightShift", "Up"]);
+  add(5, 10.25, 1, ["Slash"]);
+  add(6, [0, 1.25, 2.5, 3.75, 10, 11.25, 12.5, 13.75, 15.5, 16.5, 17.5],
+    [1.25, 1.25, 1.25, 6.25, 1.25, 1.25, 1.25, 1.25, 1, 1, 1],
+    ["LeftCtrl", "LeftMeta", "LeftAlt", "Space", "RightAlt", "Fn", "Menu", "RightCtrl", "Left", "Down", "Right"]);
+
+  return map;
 }
 
 function keyLabel(name) {
   const labels = {
-    Escape: "Esc", Backspace: "Bksp", LeftBracket: "[", RightBracket: "]",
-    Backslash: "\\", Semicolon: ";", Apostrophe: "'", Comma: ",", Period: ".",
-    Slash: "/", Grave: "`", CapsLock: "Caps", LeftShift: "LShift", RightShift: "RShift",
+    Esc: "Esc", Backtick: "`", Backspace: "Bksp", LeftBracket: "[", RightBracket: "]",
+    Backslash: "\\", Semicolon: ";", Quote: "'", Comma: ",", Period: ".",
+    Slash: "/", CapsLock: "Caps", LeftShift: "LShift", RightShift: "RShift",
     LeftCtrl: "LCtrl", RightCtrl: "RCtrl", LeftAlt: "LAlt", RightAlt: "RAlt",
     LeftMeta: "Meta", Space: "Space", PrintScreen: "PrtSc", ScrollLock: "ScrLk",
     PageUp: "PgUp", PageDown: "PgDn", Insert: "Ins", Delete: "Del",
-    ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→",
+    Up: "↑", Down: "↓", Left: "←", Right: "→",
   };
   if (labels[name]) return labels[name];
   if (name.startsWith("Digit")) return name.slice(5);
@@ -383,18 +460,6 @@ function keyLabel(name) {
 function hex4(value) { return Number(value).toString(16).padStart(4, "0"); }
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
-}
-function withAlpha(hex, alpha) {
-  const value = hex.replace("#", "");
-  const r = parseInt(value.slice(0, 2), 16);
-  const g = parseInt(value.slice(2, 4), 16);
-  const b = parseInt(value.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-function tint(hex, amount) {
-  const value = hex.replace("#", "");
-  const channels = [0, 2, 4].map((offset) => Math.min(255, Math.round(parseInt(value.slice(offset, offset + 2), 16) + 255 * amount)));
-  return `rgb(${channels.join(",")})`;
 }
 
 boot();
