@@ -4,6 +4,9 @@
 .idea/
 .vscode/
 
+# Tauri build-time generated schemas/resources.
+/apps/kd3b-control/src-tauri/gen/
+
 # Raw third-party/public research downloads are fetched locally.
 /captures/raw/*
 !/captures/raw/.gitkeep
