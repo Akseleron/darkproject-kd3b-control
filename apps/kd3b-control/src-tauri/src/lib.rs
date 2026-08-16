@@ -148,10 +148,20 @@ fn get_effect_catalog() -> Vec<EffectDto> {
 
 #[tauri::command]
 fn preview_effect(request: PreviewRequest) -> Result<PreviewFrameDto, String> {
-    let kind = parse_effect(&request.kind)?;
-    let primary = parse_color(&request.primary)?;
-    let secondary = parse_color(&request.secondary)?;
-    let direction = match request.direction.as_str() {
+    let PreviewRequest {
+        kind,
+        primary,
+        secondary,
+        speed,
+        brightness_percent,
+        direction,
+        elapsed_seconds,
+    } = request;
+
+    let kind = parse_effect(&kind)?;
+    let primary = parse_color(&primary)?;
+    let secondary = parse_color(&secondary)?;
+    let direction = match direction.as_str() {
         "forward" => Direction::Forward,
         "reverse" => Direction::Reverse,
         other => return Err(format!("unknown direction '{other}'")),
@@ -160,11 +170,11 @@ fn preview_effect(request: PreviewRequest) -> Result<PreviewFrameDto, String> {
     let mut config = EffectConfig::new(kind);
     config.primary = primary;
     config.secondary = secondary;
-    config.speed = request.speed;
-    config.brightness_percent = request.brightness_percent.min(100);
+    config.speed = speed;
+    config.brightness_percent = brightness_percent.min(100);
     config.direction = direction;
 
-    let frame = render(&config, FrameContext::new(request.elapsed_seconds));
+    let frame = render(&config, FrameContext::new(elapsed_seconds));
     Ok(PreviewFrameDto {
         colors: frame.into_iter().map(color_hex).collect(),
     })
@@ -208,6 +218,11 @@ const fn effect_label(kind: EffectKind) -> &'static str {
     }
 }
 
+/// Runs the KD3B Control desktop application.
+///
+/// # Panics
+///
+/// Panics if Tauri cannot start the application or its event loop fails.
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
