@@ -53,17 +53,17 @@ Exit criterion: **met**. The capture set is classified and its evidence boundary
 
 ## Phase 3 - Software effect engine
 
-Implement frame-based host rendering:
+Status: complete for the initial host-rendered effect set.
+
+Implemented frame model:
 
 ```text
 Effect + FrameContext -> [RGB; 87]
 ```
 
-The layout coordinate system should derive from the documented KD3B protocol offset grid, while keeping logical-key identity separate from geometry.
+Implemented effects and transforms:
 
-Initial effects:
-
-- solid and gradient;
+- gradient;
 - wave;
 - conic band;
 - spiral;
@@ -73,46 +73,56 @@ Initial effects:
 - breathing;
 - rain;
 - fire;
-- reactive key pulse/trigger after passive key-event integration.
+- host-side brightness;
+- speed and direction controls.
 
-Engine requirements:
+The engine is hardware-independent and covered by deterministic tests. The hardware worker coalesces identical consecutive frames and is cancellable. Reactive key pulse/trigger remains tied to future passive key-event integration rather than blocking the desktop application.
 
-- deterministic hardware-free frame generation tests;
-- brightness as a host-side transform;
-- speed and direction parameters where meaningful;
-- frame-rate limiting;
-- write coalescing so identical frames are not resent;
-- cancellation without leaving a background writer alive;
-- no persistent keyboard configuration writes.
-
-Exit criterion: reusable effect engine capable of producing 87-key Direct RGB frames independently of the UI and hardware transport.
+Exit criterion: **met**. `kd3b-effects` produces reusable 87-key Direct RGB frames independently of the UI and hardware transport.
 
 ## Phase 4 - Desktop application
 
-Scaffold the native Linux-first desktop application after the effect-engine API is stable enough to expose without protocol churn.
+Status: implementation complete up to the next physical hardware-streaming validation gate.
 
-Initial UI:
+Implemented:
 
-- device status;
-- visual 87-key layout;
-- per-key and group selection;
-- solid/direct RGB;
-- software effects;
-- brightness/speed/direction controls;
-- live preview;
-- explicit distinction between volatile host-rendered lighting and any future persistent/onboard settings;
-- profile save/load.
+- Tauri 2 Linux-first desktop application;
+- automatic NVIDIA/Wayland WebKitGTK DMABUF workaround before WebKit initialization;
+- read-only device status and unique interface-2 selection;
+- accurate visual 87-key TKL geometry;
+- continuous 60 FPS target live preview without scroll-induced suspension;
+- software effect selection and brightness/speed/direction/color controls;
+- Direct RGB mode with per-key selection and reusable key groups;
+- complete 87-key host frame editing, including an all-key solid-color workflow;
+- session-only explicit hardware-output arming gate;
+- one-shot full-frame Direct RGB path behind the gate;
+- cancellable continuous effect worker behind the gate;
+- named host profile save/load/delete containing effect state and the complete Direct RGB frame;
+- visible separation between host profiles and factory/onboard state;
+- read-only KD3-family documentation for the three onboard profile shortcuts and Fn shortcut groups;
+- JavaScript syntax validation plus Rust fmt/check/clippy/test in CI.
 
-The desktop runtime must use the same protocol/device/effect crates as the CLI rather than duplicating USB logic.
+Still required before Phase 4 can be merged as validated:
+
+1. Local GUI QA of the current branch after the full editor/profile changes.
+2. One explicitly approved physical continuous-effect test on the KD3B.
+3. Confirm clean stop, keyboard responsiveness, device enumeration and no stranded writer.
+4. Record the hardware result and then decide whether the conservative hardware stream interval should be raised.
+
+The desktop runtime uses the same protocol/device/effect crates as the CLI rather than duplicating USB logic.
+
+Exit criterion: **pending only the physical continuous-stream validation and resulting documentation**.
+
+See `docs/PHASE4_STATUS.md` and `docs/research/FACTORY_LAYER.md`.
 
 ## Phase 5 - Profiles and automation
 
-- named profiles;
-- import/export JSON;
+- JSON import/export for host profiles;
 - profile inheritance;
-- manual override;
+- manual override policy;
 - application-based auto switching;
-- optional daemon/tray runtime.
+- optional daemon/tray runtime;
+- filesystem-backed profile library when the persistence UX is finalized.
 
 ## Phase 6 - Persistent/onboard protocol, keymap, Fn and macros
 
@@ -125,8 +135,10 @@ Recover from an exact KD3B OEM application or new controlled USB captures:
 - Fn layer;
 - multimedia actions;
 - macro storage;
-- onboard profile format;
+- three-slot onboard profile format;
 - persistence/readback semantics.
+
+KD3-family evidence for `Fn + F1..F4` sound, `Fn + F5..F9` lighting and `Fn + F10..F12` three onboard profiles is documented in `docs/research/FACTORY_LAYER.md`. This is a user-facing capability fact, not a recovered write protocol.
 
 Host-side Linux remapping is secondary and must not be presented as equivalent to onboard programming.
 
