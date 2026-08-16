@@ -3,6 +3,7 @@ members = [
     "crates/kd3b-protocol",
     "crates/kd3b-device",
     "apps/dpctl",
+    "tools/kd3b-capture",
 ]
 resolver = "2"
 
