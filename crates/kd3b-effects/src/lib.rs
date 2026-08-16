@@ -217,12 +217,7 @@ fn render_breathing(primary: Rgb8, phase: f32) -> Rgb8 {
     scale_color(primary, intensity * intensity)
 }
 
-fn render_rain(
-    config: &EffectConfig,
-    key: Key,
-    position: KeyPosition,
-    phase: f32,
-) -> Rgb8 {
+fn render_rain(config: &EffectConfig, key: Key, position: KeyPosition, phase: f32) -> Rgb8 {
     let epoch = phase.floor() as i64;
     let local = fract01(phase);
     let spawn = unit_hash(config.seed, u64::from(position.column), epoch as u64);
@@ -237,17 +232,16 @@ fn render_rain(
     scale_color(mix(config.primary, config.secondary, 0.22), trail * twinkle)
 }
 
-fn render_fire(
-    config: &EffectConfig,
-    key: Key,
-    position: KeyPosition,
-    phase: f32,
-) -> Rgb8 {
+fn render_fire(config: &EffectConfig, key: Key, position: KeyPosition, phase: f32) -> Rgb8 {
     let frame_tick = (phase * 12.0).floor() as i64;
     let noise = unit_hash(config.seed, key.index() as u64, frame_tick as u64);
     let upward_heat = (1.0 - position.y * 0.78).clamp(0.0, 1.0);
     let flicker = (upward_heat * (0.45 + noise * 0.75)).clamp(0.0, 1.0);
-    let hot = mix(config.secondary, Rgb8::new(0xff, 0xf0, 0x70), flicker * 0.45);
+    let hot = mix(
+        config.secondary,
+        Rgb8::new(0xff, 0xf0, 0x70),
+        flicker * 0.45,
+    );
     scale_color(hot, flicker)
 }
 
@@ -318,9 +312,8 @@ fn rainbow(hue: f32) -> Rgb8 {
 }
 
 fn unit_hash(seed: u64, a: u64, b: u64) -> f32 {
-    let mut value = seed
-        ^ a.wrapping_mul(0x9e37_79b9_7f4a_7c15)
-        ^ b.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    let mut value =
+        seed ^ a.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ b.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     value ^= value >> 30;
     value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
     value ^= value >> 27;
