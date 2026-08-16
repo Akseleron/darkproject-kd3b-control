@@ -1,0 +1,15 @@
+[package]
+name = "kd3b-control-native"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+iced = { version = "0.14.0", features = ["canvas", "tokio"] }
+kd3b-device = { path = "../../crates/kd3b-device" }
+kd3b-effects = { path = "../../crates/kd3b-effects" }
+kd3b-protocol = { path = "../../crates/kd3b-protocol" }
