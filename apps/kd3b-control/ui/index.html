@@ -224,14 +224,18 @@
             <span class="panel-kicker">FACTORY / ONBOARD</span>
             <h2>Fn-слой и встроенные профили</h2>
             <div class="boundary-note warning-note">
-              <strong>Не смешиваем с host-профилями</strong>
-              <p>У семейства Dark Project этого поколения есть Default Layer, Fn-слой и встроенная память. Для KD3B rev.2 точные заводские назначения и протокол чтения/записи ещё не восстановлены, поэтому приложение их не перезаписывает и не изображает известными.</p>
+              <strong>Документировано для семейства KD3, только чтение</strong>
+              <p>Это справочная модель заводских возможностей, а не live readback клавиатуры. USB-протокол persistence/remap/Fn ещё не восстановлен, поэтому KD3B Control ничего здесь не записывает.</p>
             </div>
             <div class="factory-grid">
-              <div class="factory-item"><strong>Default Layer</strong><span>Заводская базовая раскладка. Отображение и безопасный readback ещё предстоит восстановить.</span></div>
-              <div class="factory-item"><strong>Fn Layer</strong><span>OEM ПО этого поколения отдельно редактирует Fn1 Layer, включая мультимедиа. Точный KD3B набор нужно подтвердить.</span></div>
-              <div class="factory-item"><strong>Onboard profiles</strong><span>Есть свидетельства нескольких аппаратных профилей у семейства KD1/KD3 rev.2. Точные сочетания KD3B не хардкодим без модельного источника или capture.</span></div>
-              <div class="factory-item"><strong>Macros / remap</strong><span>Оставлены read-only boundary до восстановления формата и семантики persistence.</span></div>
+              <div class="factory-item"><strong>Fn + F1…F4 · звук</strong><span>Группа управления звуком, документированная для KD3A/KD3B семейства.</span></div>
+              <div class="factory-item"><strong>Fn + F5…F9 · подсветка</strong><span>Аппаратные сочетания управления режимами подсветки.</span></div>
+              <div class="factory-item"><strong>Fn + F10 · профиль 1</strong><span>Переключение на первый из трёх встроенных профилей.</span></div>
+              <div class="factory-item"><strong>Fn + F11 · профиль 2</strong><span>Переключение на второй встроенный профиль.</span></div>
+              <div class="factory-item"><strong>Fn + F12 · профиль 3</strong><span>Переключение на третий встроенный профиль.</span></div>
+              <div class="factory-item"><strong>Дополнительные Fn-функции</strong><span>Для семейства также описаны яркость, скорость эффекта и блокировка Win. Точные физические сочетания сохраняем как исследовательскую задачу, пока не закрепим их модельным источником/capture.</span></div>
+              <div class="factory-item"><strong>Default Layer / Fn1 Layer</strong><span>OEM ПО разделяет базовый и Fn-слой и позволяет назначать мультимедиа. Запись слоя пока не реализована.</span></div>
+              <div class="factory-item"><strong>Macros / remap / onboard memory</strong><span>Встроенная память существует, но формат чтения/записи не восстановлен. Эти функции остаются read-only boundary.</span></div>
             </div>
           </section>
         </div>
