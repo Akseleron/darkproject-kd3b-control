@@ -1,11 +1,7 @@
 name: KD3B Capture Research
 
 on:
-  push:
-    branches:
-      - assistant/phase2-capture-tool
-    paths:
-      - .github/workflows/capture-research.yml
+  workflow_dispatch:
 
 permissions:
   contents: read

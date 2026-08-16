@@ -2,7 +2,7 @@
 
 ## Phase 0 - Repository baseline
 
-Status: prepared.
+Status: complete.
 
 Acceptance criteria:
 
@@ -13,61 +13,45 @@ Acceptance criteria:
 
 ## Phase 1 - Direct RGB CLI
 
+Status: complete on the tested KD3B rev.2 unit.
+
 Goal: establish a safe, tested path from typed RGB data to the documented KD3B direct-RGB packet format.
 
-Tasks:
+Completed:
 
-1. Implement keyboard key enum/layout and offset table.
-2. Implement two 256-byte direct RGB packet encoders.
-3. Add complete golden tests.
-4. Define transport trait and recording mock transport.
-5. Implement `dpctl devices` read-only discovery.
-6. Resolve the correct Linux transport for the configuration interface.
-7. Add `dpctl info` read-only diagnostics.
-8. Add a hardware-gated `dpctl rgb key F1 ff0000` path.
-9. After explicit user approval, perform the first one-key write.
-10. Add solid/per-key RGB commands only after the first test is confirmed.
+1. Keyboard key enum/layout and offset table.
+2. Two 256-byte Direct RGB packet encoder.
+3. Golden tests.
+4. Transport trait and recording mock transport.
+5. `dpctl devices` read-only discovery.
+6. Exact interface-2 Linux HIDAPI/libusb transport.
+7. `dpctl info` read-only diagnostics.
+8. Hardware-gated open/drop probe.
+9. Explicitly approved first one-key write: physical F1 became red, all other mapped keys turned off, exit code 0.
+10. General volatile `rgb key`, `rgb solid`, and `rgb off` CLI paths.
 
-Exit criterion: reliable direct RGB control without GUI.
+Exit criterion: **met**. Reliable Direct RGB control exists without GUI.
 
-## Phase 2 - OEM onboard lighting protocol
+## Phase 2 - Public capture classification
 
-Use the public KD3B rev.2 packet captures to recover:
+Status: complete for the OpenRGB issue #2292 capture set.
 
-- off;
-- solid colors;
-- wave;
-- conic band;
-- spiral;
-- cycle;
-- linear wave;
-- ripple;
-- breathing;
-- rain;
-- fire;
-- trigger/reactive;
-- brightness 0-100;
-- speed/direction/color parameters if present.
+A dedicated pcapng/USBPcap parser and diff tool was implemented before interpreting captures manually.
 
-Create a capture parser/diff tool before manually reading packets one by one.
+Result:
 
-Exit criterion: documented typed onboard-lighting API with tests.
+- RED/GREEN/BLUE/OFF are ordinary 256-byte Direct RGB frame streams.
+- WAVE, ConicBand, Spiral, Cycle, LinearWave, Ripple, Breathing, Rain, Fire, and Trigger are also ordinary Direct RGB frame streams.
+- `Brightness0-100` changes the streamed RGB channel values; no separate brightness command appears in the captured endpoint-3 OUT stream.
+- No distinct onboard-effect command packet was found in this capture set.
 
-## Phase 3 - Desktop shell
+See `docs/research/openrgb-2292-capture-analysis.md`.
 
-Scaffold Tauri 2 only after Phases 1-2 are stable.
+Consequence: do not invent an onboard-lighting protocol from these files. The captured OEM effects are suitable references for a host-rendered software effect engine. Persistent/onboard lighting remains unknown unless different evidence is recovered.
 
-Initial UI:
+Exit criterion: **met**. The capture set is classified and its evidence boundary is documented.
 
-- device status;
-- visual 87-key layout;
-- per-key and group selection;
-- solid/direct RGB;
-- onboard effects;
-- brightness/speed/direction controls;
-- profile save/load.
-
-## Phase 4 - Software effect engine
+## Phase 3 - Software effect engine
 
 Implement frame-based host rendering:
 
@@ -75,19 +59,51 @@ Implement frame-based host rendering:
 Effect + FrameContext -> [RGB; 87]
 ```
 
-Context should eventually expose time, delta, layout coordinates, pressed-key events, groups, and parameters.
+The layout coordinate system should derive from the documented KD3B protocol offset grid, while keeping logical-key identity separate from geometry.
 
 Initial effects:
 
-- gradient;
+- solid and gradient;
 - wave;
+- conic band;
+- spiral;
+- cycle;
+- linear wave;
 - radial ripple;
-- reactive key pulse;
-- trail;
+- breathing;
 - rain;
-- heatmap.
+- fire;
+- reactive key pulse/trigger after passive key-event integration.
 
-Add frame-rate limiting and write coalescing so USB traffic is controlled.
+Engine requirements:
+
+- deterministic hardware-free frame generation tests;
+- brightness as a host-side transform;
+- speed and direction parameters where meaningful;
+- frame-rate limiting;
+- write coalescing so identical frames are not resent;
+- cancellation without leaving a background writer alive;
+- no persistent keyboard configuration writes.
+
+Exit criterion: reusable effect engine capable of producing 87-key Direct RGB frames independently of the UI and hardware transport.
+
+## Phase 4 - Desktop application
+
+Scaffold the native Linux-first desktop application after the effect-engine API is stable enough to expose without protocol churn.
+
+Initial UI:
+
+- device status;
+- visual 87-key layout;
+- per-key and group selection;
+- solid/direct RGB;
+- software effects;
+- brightness/speed/direction controls;
+- live preview;
+- explicit distinction between volatile host-rendered lighting and any future persistent/onboard settings;
+- profile save/load.
+
+The desktop runtime must use the same protocol/device/effect crates as the CLI rather than duplicating USB logic.
 
 ## Phase 5 - Profiles and automation
 
@@ -98,17 +114,19 @@ Add frame-rate limiting and write coalescing so USB traffic is controlled.
 - application-based auto switching;
 - optional daemon/tray runtime.
 
-## Phase 6 - Onboard keymap/Fn/macros
+## Phase 6 - Persistent/onboard protocol, keymap, Fn and macros
 
 Do not implement by guessing.
 
 Recover from an exact KD3B OEM application or new controlled USB captures:
 
+- any actual onboard lighting-mode command path;
 - base keymap;
 - Fn layer;
 - multimedia actions;
 - macro storage;
-- onboard profile format.
+- onboard profile format;
+- persistence/readback semantics.
 
 Host-side Linux remapping is secondary and must not be presented as equivalent to onboard programming.
 
