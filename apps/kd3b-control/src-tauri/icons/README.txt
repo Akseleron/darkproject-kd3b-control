@@ -1,0 +1,1 @@
+KD3B Control application icon resources.
