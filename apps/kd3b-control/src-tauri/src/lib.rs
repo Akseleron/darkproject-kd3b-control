@@ -1,9 +1,16 @@
+mod hardware;
+
 use kd3b_device::{
     DiscoveredHidInterface, enumerate_target_hid_interfaces, select_configuration_interface,
 };
 use kd3b_effects::{Direction, EffectConfig, EffectKind, FrameContext, key_position, render};
 use kd3b_protocol::{ALL_KEYS, Rgb8};
 use serde::{Deserialize, Serialize};
+
+use hardware::{
+    HardwareController, apply_static_frame, arm_hardware_output, disarm_hardware_output,
+    get_hardware_output_status, start_effect_output, stop_effect_output,
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -225,11 +232,18 @@ const fn effect_label(kind: EffectKind) -> &'static str {
 /// Panics if Tauri cannot start the application or its event loop fails.
 pub fn run() {
     tauri::Builder::default()
+        .manage(HardwareController::default())
         .invoke_handler(tauri::generate_handler![
             get_device_status,
             get_layout,
             get_effect_catalog,
-            preview_effect
+            preview_effect,
+            arm_hardware_output,
+            disarm_hardware_output,
+            get_hardware_output_status,
+            apply_static_frame,
+            start_effect_output,
+            stop_effect_output
         ])
         .run(tauri::generate_context!())
         .expect("failed to run KD3B Control desktop application");
