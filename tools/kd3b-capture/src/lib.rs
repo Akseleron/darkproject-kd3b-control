@@ -172,7 +172,10 @@ pub fn parse_pcapng(bytes: &[u8]) -> Result<PcapNgCapture, ParseError> {
         }
 
         let section_endianness = endianness.ok_or_else(|| {
-            ParseError::new(offset, "packet capture does not start with a section header")
+            ParseError::new(
+                offset,
+                "packet capture does not start with a section header",
+            )
         })?;
         let section_index = current_section.expect("endianness implies an active section");
         let block_type = section_endianness.read_u32(raw_type);
@@ -201,7 +204,8 @@ pub fn parse_pcapng(bytes: &[u8]) -> Result<PcapNgCapture, ParseError> {
                         "enhanced packet block is too short",
                     ));
                 }
-                let interface_id = section_endianness.read_u32([body[0], body[1], body[2], body[3]]);
+                let interface_id =
+                    section_endianness.read_u32([body[0], body[1], body[2], body[3]]);
                 let captured_len =
                     section_endianness.read_u32([body[12], body[13], body[14], body[15]]);
                 let original_len =
@@ -216,7 +220,10 @@ pub fn parse_pcapng(bytes: &[u8]) -> Result<PcapNgCapture, ParseError> {
                     )
                 })?;
                 let captured_len_usize = usize::try_from(captured_len).map_err(|_| {
-                    ParseError::new(body_start + 12, "captured length does not fit this platform")
+                    ParseError::new(
+                        body_start + 12,
+                        "captured length does not fit this platform",
+                    )
                 })?;
                 let packet_end = 20usize.checked_add(captured_len_usize).ok_or_else(|| {
                     ParseError::new(body_start + 12, "captured length overflows address space")
@@ -340,11 +347,7 @@ pub fn kd3b_configuration_out_payloads(
         .collect())
 }
 
-fn block_length(
-    bytes: &[u8],
-    offset: usize,
-    endianness: Endianness,
-) -> Result<usize, ParseError> {
+fn block_length(bytes: &[u8], offset: usize, endianness: Endianness) -> Result<usize, ParseError> {
     let length_u32 = endianness.read_u32(array4(bytes, offset + 4)?);
     usize::try_from(length_u32)
         .map_err(|_| ParseError::new(offset + 4, "block length does not fit this platform"))
@@ -357,7 +360,10 @@ fn validate_block(
     endianness: Endianness,
 ) -> Result<(), ParseError> {
     if total_length < 12 {
-        return Err(ParseError::new(offset + 4, "block length is smaller than 12"));
+        return Err(ParseError::new(
+            offset + 4,
+            "block length is smaller than 12",
+        ));
     }
     if total_length % 4 != 0 {
         return Err(ParseError::new(
@@ -369,7 +375,10 @@ fn validate_block(
         .checked_add(total_length)
         .ok_or_else(|| ParseError::new(offset + 4, "block length overflows address space"))?;
     if end > bytes.len() {
-        return Err(ParseError::new(offset + 4, "block extends past end of file"));
+        return Err(ParseError::new(
+            offset + 4,
+            "block extends past end of file",
+        ));
     }
     let trailing = endianness.read_u32(array4(bytes, end - 4)?);
     let trailing = usize::try_from(trailing)
@@ -424,8 +433,7 @@ mod tests {
 
     #[test]
     fn ignores_inbound_endpoint_three_for_configuration_output_extraction() {
-        let capture = parse_pcapng(&fixture_capture(0x83, 1, &[1, 2, 3]))
-            .expect("fixture parses");
+        let capture = parse_pcapng(&fixture_capture(0x83, 1, &[1, 2, 3])).expect("fixture parses");
 
         assert!(
             kd3b_configuration_out_payloads(&capture)

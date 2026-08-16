@@ -1,8 +1,7 @@
 use std::{env, error::Error, fs, path::Path};
 
 use kd3b_capture::{
-    PcapNgCapture, UsbPcapPacket, kd3b_configuration_out_payloads, parse_pcapng,
-    usbpcap_packets,
+    PcapNgCapture, UsbPcapPacket, kd3b_configuration_out_payloads, parse_pcapng, usbpcap_packets,
 };
 
 const USAGE: &str = "Usage:\n  kd3b-capture list <capture.pcapng>\n  kd3b-capture extract <capture.pcapng>\n  kd3b-capture diff <left.pcapng> <right.pcapng>\n";
