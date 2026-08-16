@@ -2,9 +2,7 @@ use std::fmt::{self, Write as _};
 
 use kd3b_device::{DiscoveredHidInterface, select_configuration_interface};
 
-pub(crate) fn render_info(
-    interfaces: &[DiscoveredHidInterface],
-) -> Result<String, fmt::Error> {
+pub(crate) fn render_info(interfaces: &[DiscoveredHidInterface]) -> Result<String, fmt::Error> {
     let mut output = String::from(
         "Target: Dark Project KD3B rev.2 (VID:PID 195d:2061)\nOperation: metadata enumeration only; dpctl info does not open the selected interface or request HID reports.\n",
     );
@@ -74,8 +72,7 @@ mod tests {
 
     #[test]
     fn info_reports_ambiguous_selection_without_guessing() {
-        let output = render_info(&[interface(2, "a"), interface(2, "b")])
-            .expect("render succeeds");
+        let output = render_info(&[interface(2, "a"), interface(2, "b")]).expect("render succeeds");
 
         assert!(output.contains(
             "Configuration interface selection: unavailable (target HID discovery returned 2 interface-2 records; refusing to choose)\n"

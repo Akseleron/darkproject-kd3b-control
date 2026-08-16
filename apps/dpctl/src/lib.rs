@@ -282,7 +282,11 @@ mod tests {
         // Then
         assert_eq!(output.exit_code, 0);
         assert!(output.stdout.contains("Matching HID interfaces: 3\n"));
-        assert!(output.stdout.contains("Configuration interface selection: unique\n"));
+        assert!(
+            output
+                .stdout
+                .contains("Configuration interface selection: unique\n")
+        );
         assert!(output.stdout.contains("Interface: 2\nPath: 1-11:1.2\n"));
         assert_eq!(output.stderr, "");
     }

@@ -4,8 +4,8 @@ use hidapi::{HidApi, HidDevice, HidError};
 
 use crate::{
     ConfigurationInterfaceIndex, ConfigurationInterfaceSelectionError, DeviceDiscoveryError,
-    DiscoveredHidInterface, PacketTransport,
-    discovery::enumerate_target_runtime_hid_interfaces, select_configuration_interface,
+    DiscoveredHidInterface, PacketTransport, discovery::enumerate_target_runtime_hid_interfaces,
+    select_configuration_interface,
 };
 
 /// Failure to open the selected configuration interface as a retained transport.
