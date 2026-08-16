@@ -49,7 +49,7 @@ Observed:
 
 OpenRGB's exact-device detector additionally targets interface `2`, usage page `0xFFC2`, usage `4` for this VID/PID.
 
-The relationship between the USB-level 64-byte OUT endpoint and the 256-byte HIDAPI writes used by OpenRGB must still be verified before the first hardware write. Do not assume report framing or that a 256-byte application write maps directly to one USB transaction.
+The USB descriptor exposes a 64-byte OUT max packet size, while the application-level direct-RGB codec submits 256-byte buffers through HIDAPI. The successful live write described below proves the application-level path works on the tested system, but it does not by itself reveal how HIDAPI/libusb frames or fragments those buffers at USB-transfer level.
 
 ### Live Phase-1 open/drop validation
 
@@ -78,15 +78,33 @@ After the user manually entered the exact confirmation phrase `OPEN INTERFACE 2`
 No HID report read/write/feature operation was requested.
 ```
 
-This confirms only that the selected interface-2 raw HIDAPI path could be opened successfully with the pinned Linux static-libusb HIDAPI backend and that the returned handle could then be dropped. The application did not request any HID report read, write, feature-report, report-descriptor, RGB, or configuration operation during this probe.
+This confirms that the selected interface-2 raw HIDAPI path could be opened successfully with the pinned Linux static-libusb HIDAPI backend and that the returned handle could then be dropped. The application did not request any HID report read, write, feature-report, report-descriptor, RGB, or configuration operation during this probe.
 
-HIDAPI/libusb may internally rescan, path-match, open, claim/release an interface, detach/reattach a kernel driver where applicable, or establish backend-managed interrupt-IN activity where applicable. The successful probe is not evidence that every such backend effect occurred in this run.
+### Live Phase-1 first direct-RGB validation
 
-The following remain **UNKNOWN** until a separately gated hardware-write test:
+Later on 2026-08-16, after explicit approval for the first hardware RGB write, the target host ran:
 
-- whether a 256-byte HIDAPI write succeeds on this interface/backend;
-- how that write is framed at the USB transfer level;
-- whether the documented two-packet direct-RGB sequence behaves as expected on this exact Linux path.
+```text
+cargo run -p dpctl -- rgb key F1 ff0000
+```
+
+The command selected the same target metadata:
+
+```text
+Interface: 2
+VID:PID: 195d:2061
+Path: 1-11:1.2
+Release: 0x3131
+Bus: usb
+```
+
+After the user manually entered the exact confirmation phrase required by that validation build, `dpctl` requested exactly two 256-byte HIDAPI writes in documented packet-A then packet-B order. HIDAPI accepted the complete pair and the process exited `0`.
+
+The physical keyboard produced the expected visible result: **only F1 illuminated red; every other mapped key was off**.
+
+This live result confirms the tested Linux transport path, write order, direct-RGB codec, and the documented F1 logical mapping are mutually compatible on this exact KD3B rev.2 unit. It does not prove persistence or any onboard configuration protocol, and it does not reveal the backend's lower-level USB transfer framing.
+
+HIDAPI/libusb may internally rescan, path-match, open, claim/release an interface, detach/reattach a kernel driver where applicable, or establish backend-managed interrupt-IN activity where applicable. The live results are not evidence that every possible backend effect occurred.
 
 ## udev state used during research
 

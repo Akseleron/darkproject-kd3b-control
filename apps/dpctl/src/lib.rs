@@ -10,7 +10,7 @@ use kd3b_device::{
 use devices_cli::render_interfaces;
 use info_cli::render_info;
 use probe_cli::ProbeSession;
-use rgb_cli::RgbSession;
+use rgb_cli::{RgbCommand, RgbSession};
 
 mod devices_cli;
 mod info_cli;
@@ -19,8 +19,8 @@ mod probe_cli;
 mod probe_cli_tests;
 mod rgb_cli;
 
-const USAGE: &str = "Usage: dpctl <devices|info|probe|rgb key F1 ff0000>\n";
-const HELP: &str = "Usage: dpctl <devices|info|probe|rgb key F1 ff0000>\n\nCommands:\n  devices             Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  info                Summarize current read-only target/interface status.\n  probe               Interactively prepare and open interface 2 without requesting HID report operations.\n  rgb key F1 ff0000   Hardware-gated first direct-RGB validation: F1 red, all other mapped keys black/off.\n";
+const USAGE: &str = "Usage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n";
+const HELP: &str = "Usage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n\nCommands:\n  devices                    Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  info                       Summarize current read-only target/interface status.\n  probe                      Interactively prepare and open interface 2 without requesting HID report operations.\n  rgb key <KEY> <RRGGBB>     Set one mapped key to a color and all other mapped keys black/off.\n  rgb solid <RRGGBB>         Set all 87 mapped keys to one color.\n  rgb off                    Set all 87 mapped keys black/off.\n\nRGB key names use enum-style catalogue names such as F1, A, Space, LeftShift, and PrintScreen. Colors are exactly six hexadecimal digits without '#'. RGB writes are volatile and interactively confirmed.\n";
 
 /// Complete process output for one `dpctl` invocation.
 #[derive(Debug, PartialEq, Eq)]
@@ -35,7 +35,7 @@ enum Command {
     Devices,
     Info,
     Probe,
-    RgbKeyF1Red,
+    Rgb(RgbCommand),
     UsageError(String),
 }
 
@@ -55,13 +55,13 @@ where
             ProbeSession::new(&mut input, &mut output, is_interactive_stdin)
                 .run(prepare_configuration_interface_probe)
         }
-        Command::RgbKeyF1Red => {
+        Command::Rgb(command) => {
             let stdin = io::stdin();
             let is_interactive_stdin = stdin.is_terminal();
             let mut input = stdin.lock();
             let stdout = io::stdout();
             let mut output = stdout.lock();
-            RgbSession::new(&mut input, &mut output, is_interactive_stdin).run_real()
+            RgbSession::new(&mut input, &mut output, is_interactive_stdin).run_real(command)
         }
         command => run_non_interactive(command, enumerate_target_hid_interfaces),
     }
@@ -120,7 +120,7 @@ where
             Err(error) => discovery_failure(error),
         },
         Command::Probe => interactive_dispatch_required("probe"),
-        Command::RgbKeyF1Red => interactive_dispatch_required("RGB hardware write"),
+        Command::Rgb(_) => interactive_dispatch_required("RGB hardware write"),
         Command::UsageError(error) => CommandOutput {
             exit_code: 2,
             stdout: String::new(),
@@ -159,24 +159,13 @@ where
     let command = command.as_ref();
 
     if command == "rgb" {
-        let mode = arguments.next();
-        let key = arguments.next();
-        let color = arguments.next();
-        let extra = arguments.next();
-        if mode.as_ref().is_some_and(|value| value.as_ref() == "key")
-            && key.as_ref().is_some_and(|value| value.as_ref() == "F1")
-            && color
-                .as_ref()
-                .is_some_and(|value| value.as_ref() == "ff0000")
-            && extra.is_none()
-        {
-            return Command::RgbKeyF1Red;
-        }
-
-        return Command::UsageError(
-            "first hardware-gated RGB validation currently accepts exactly 'rgb key F1 ff0000'"
-                .to_owned(),
-        );
+        let rgb_arguments: Vec<String> = arguments
+            .map(|argument| argument.as_ref().to_owned())
+            .collect();
+        return match RgbCommand::parse(&rgb_arguments) {
+            Ok(command) => Command::Rgb(command),
+            Err(error) => Command::UsageError(error),
+        };
     }
 
     let extra = arguments.next();
@@ -206,21 +195,47 @@ mod tests {
     use std::cell::Cell;
 
     use kd3b_device::{BusType, DiscoveredHidInterface};
+    use kd3b_protocol::{Key, Rgb8};
 
     use super::{Command, HELP, parse_arguments, run_with_discovery};
+    use crate::rgb_cli::RgbCommand;
 
     #[test]
-    fn gated_rgb_command_is_recognized_only_in_exact_first_write_form() {
+    fn rgb_commands_parse_key_solid_and_off_forms() {
+        match parse_arguments(["rgb", "key", "F1", "ff0000"]) {
+            Command::Rgb(RgbCommand::Key { key, color }) => {
+                assert_eq!(key, Key::F1);
+                assert_eq!(color, Rgb8::new(255, 0, 0));
+            }
+            _ => panic!("expected RGB key command"),
+        }
+
         assert!(matches!(
-            parse_arguments(["rgb", "key", "F1", "ff0000"]),
-            Command::RgbKeyF1Red
+            parse_arguments(["rgb", "solid", "112233"]),
+            Command::Rgb(RgbCommand::Solid {
+                color: Rgb8 {
+                    red: 0x11,
+                    green: 0x22,
+                    blue: 0x33
+                }
+            })
         ));
+        assert!(matches!(
+            parse_arguments(["rgb", "off"]),
+            Command::Rgb(RgbCommand::Off)
+        ));
+    }
+
+    #[test]
+    fn rgb_parser_rejects_invalid_forms_without_discovery() {
         for invalid in [
             vec!["rgb"],
             vec!["rgb", "key", "F1"],
-            vec!["rgb", "key", "F1", "FF0000"],
-            vec!["rgb", "key", "F2", "ff0000"],
-            vec!["rgb", "key", "F1", "ff0000", "extra"],
+            vec!["rgb", "key", "not-a-key", "ff0000"],
+            vec!["rgb", "key", "F1", "xyzxyz"],
+            vec!["rgb", "solid"],
+            vec!["rgb", "solid", "12345"],
+            vec!["rgb", "off", "extra"],
         ] {
             assert!(matches!(parse_arguments(invalid), Command::UsageError(_)));
         }
@@ -261,23 +276,23 @@ mod tests {
         let cases: &[(&[&str], &str)] = &[
             (
                 &[],
-                "error: missing command\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
+                "error: missing command\nUsage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n",
             ),
             (
                 &["unknown"],
-                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
+                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n",
             ),
             (
                 &["devices", "extra"],
-                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
+                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n",
             ),
             (
                 &["info", "extra"],
-                "error: unexpected argument 'extra' after 'info'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
+                "error: unexpected argument 'extra' after 'info'\nUsage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n",
             ),
             (
                 &["probe", "extra"],
-                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
+                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n",
             ),
         ];
 
