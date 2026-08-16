@@ -1,0 +1,72 @@
+name: One-off capture source fix
+
+on:
+  push:
+    branches:
+      - assistant/phase4-desktop
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: assistant/phase4-desktop
+          fetch-depth: 0
+
+      - name: Apply source fix and restore lint configuration
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          source_path = Path("tools/kd3b-capture/src/lib.rs")
+          source = source_path.read_text()
+          old = "if total_length % 4 != 0 {"
+          new = "if !total_length.is_multiple_of(4) {"
+
+          count = source.count(old)
+          if count == 1:
+              source_path.write_text(source.replace(old, new, 1))
+          elif count == 0 and new in source:
+              pass
+          else:
+              raise SystemExit(f"unexpected source state: old pattern count={count}")
+
+          cargo_path = Path("tools/kd3b-capture/Cargo.toml")
+          cargo_path.write_text("""[package]
+          name = "kd3b-capture"
+          version = "0.1.0"
+          edition.workspace = true
+          rust-version.workspace = true
+          publish = false
+
+          [lib]
+          name = "kd3b_capture"
+          path = "src/lib.rs"
+
+          [[bin]]
+          name = "kd3b-capture"
+          path = "src/main.rs"
+
+          [lints]
+          workspace = true
+          """)
+          PY
+
+      - name: Commit fix if needed
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No source changes needed."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/kd3b-capture/src/lib.rs tools/kd3b-capture/Cargo.toml
+          git commit -m "fix(capture): use is_multiple_of"
+          git push origin HEAD:assistant/phase4-desktop
