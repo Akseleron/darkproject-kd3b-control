@@ -23,14 +23,13 @@
           <span class="nav-icon">◈</span>
           <span>Подсветка</span>
         </button>
+        <button class="nav-item" type="button" data-section="profiles">
+          <span class="nav-icon">◇</span>
+          <span>Профили</span>
+        </button>
         <button class="nav-item" type="button" data-section="device">
           <span class="nav-icon">⌁</span>
           <span>Устройство</span>
-        </button>
-        <button class="nav-item disabled" type="button" disabled title="Будет добавлено после стабилизации профилей">
-          <span class="nav-icon">◇</span>
-          <span>Профили</span>
-          <small>позже</small>
         </button>
       </nav>
 
@@ -67,7 +66,7 @@
               <h2>Клавиатура</h2>
             </div>
             <div class="preview-meta">
-              <span id="fps-label">20 FPS preview</span>
+              <span id="fps-label">60 FPS preview</span>
               <span class="preview-chip">Rust renderer</span>
             </div>
           </div>
@@ -78,13 +77,24 @@
           </div>
 
           <div class="preview-footer">
-            <span>Предпросмотр рассчитывается <code>kd3b-effects</code>. HID transport открывается только после ручной разблокировки.</span>
+            <span>Клик по клавише выделяет её для Direct RGB. Эффекты рассчитываются <code>kd3b-effects</code>.</span>
             <span id="frame-status">Ожидание движка…</span>
           </div>
         </div>
 
+        <div class="lighting-mode-bar">
+          <div>
+            <span class="panel-kicker">LIGHTING MODE</span>
+            <strong>Источник кадра</strong>
+          </div>
+          <div class="segmented mode-segmented" role="group" aria-label="Режим подсветки">
+            <button class="segment active" type="button" data-lighting-mode="effect">Эффект</button>
+            <button class="segment" type="button" data-lighting-mode="direct">Direct RGB</button>
+          </div>
+        </div>
+
         <div class="control-layout">
-          <section class="control-panel effect-panel">
+          <section class="control-panel effect-panel" id="effect-editor">
             <div class="panel-heading compact">
               <div>
                 <span class="panel-kicker">EFFECT</span>
@@ -92,6 +102,35 @@
               </div>
             </div>
             <div class="effect-grid" id="effect-grid"></div>
+          </section>
+
+          <section class="control-panel direct-panel" id="direct-editor" hidden>
+            <div class="panel-heading compact">
+              <div>
+                <span class="panel-kicker">DIRECT RGB</span>
+                <h2>Клавиши и группы</h2>
+              </div>
+              <span class="selection-count" id="selection-status">0 выбрано</span>
+            </div>
+
+            <div class="group-grid">
+              <button class="group-button" type="button" data-key-group="all">Все клавиши</button>
+              <button class="group-button" type="button" data-key-group="none">Снять выделение</button>
+              <button class="group-button" type="button" data-key-group="wasd">WASD</button>
+              <button class="group-button" type="button" data-key-group="arrows">Стрелки</button>
+              <button class="group-button" type="button" data-key-group="function">F1–F12</button>
+              <button class="group-button" type="button" data-key-group="navigation">Навигация</button>
+            </div>
+
+            <div class="direct-color-row">
+              <div>
+                <label for="direct-color">Цвет выбранных клавиш</label>
+                <span id="direct-value">#4080ff</span>
+              </div>
+              <input id="direct-color" type="color" value="#4080ff" />
+              <button class="action-button" type="button" id="fill-selection">Залить выбранные</button>
+            </div>
+            <p class="editor-note">Direct RGB всегда формирует полный кадр из 87 клавиш. Это не частичная HID-запись и не чтение текущего состояния клавиатуры.</p>
           </section>
 
           <section class="control-panel settings-panel">
@@ -102,43 +141,45 @@
               </div>
             </div>
 
-            <div class="setting-row color-row">
-              <div>
-                <label for="primary-color">Основной цвет</label>
-                <span id="primary-value">#4080ff</span>
+            <div id="effect-parameters">
+              <div class="setting-row color-row">
+                <div>
+                  <label for="primary-color">Основной цвет</label>
+                  <span id="primary-value">#4080ff</span>
+                </div>
+                <input id="primary-color" type="color" value="#4080ff" />
               </div>
-              <input id="primary-color" type="color" value="#4080ff" />
-            </div>
 
-            <div class="setting-row color-row">
-              <div>
-                <label for="secondary-color">Вторичный цвет</label>
-                <span id="secondary-value">#ff3000</span>
+              <div class="setting-row color-row">
+                <div>
+                  <label for="secondary-color">Вторичный цвет</label>
+                  <span id="secondary-value">#ff3000</span>
+                </div>
+                <input id="secondary-color" type="color" value="#ff3000" />
               </div>
-              <input id="secondary-color" type="color" value="#ff3000" />
-            </div>
 
-            <div class="setting-block">
-              <div class="setting-header">
-                <label for="brightness">Яркость</label>
-                <output id="brightness-value">100%</output>
+              <div class="setting-block">
+                <div class="setting-header">
+                  <label for="brightness">Яркость</label>
+                  <output id="brightness-value">100%</output>
+                </div>
+                <input id="brightness" type="range" min="0" max="100" value="100" />
               </div>
-              <input id="brightness" type="range" min="0" max="100" value="100" />
-            </div>
 
-            <div class="setting-block">
-              <div class="setting-header">
-                <label for="speed">Скорость</label>
-                <output id="speed-value">1.00×</output>
+              <div class="setting-block">
+                <div class="setting-header">
+                  <label for="speed">Скорость</label>
+                  <output id="speed-value">1.00×</output>
+                </div>
+                <input id="speed" type="range" min="5" max="300" value="100" />
               </div>
-              <input id="speed" type="range" min="5" max="300" value="100" />
-            </div>
 
-            <div class="setting-block">
-              <div class="setting-header"><span>Направление</span></div>
-              <div class="segmented" role="group" aria-label="Направление эффекта">
-                <button class="segment active" type="button" data-direction="forward">Вперёд</button>
-                <button class="segment" type="button" data-direction="reverse">Назад</button>
+              <div class="setting-block">
+                <div class="setting-header"><span>Направление</span></div>
+                <div class="segmented" role="group" aria-label="Направление эффекта">
+                  <button class="segment active" type="button" data-direction="forward">Вперёд</button>
+                  <button class="segment" type="button" data-direction="reverse">Назад</button>
+                </div>
               </div>
             </div>
 
@@ -160,7 +201,37 @@
                 <button class="hardware-button" type="button" id="apply-frame" disabled>Применить текущий кадр один раз</button>
                 <button class="hardware-button danger" type="button" id="blackout-hardware" disabled>Погасить подсветку</button>
               </div>
-              <p class="hardware-footnote">Поток ограничен 20 FPS, одинаковые последовательные кадры не отправляются. Используется только volatile Direct RGB: профили, EEPROM, remap, macro и firmware не затрагиваются.</p>
+              <p class="hardware-footnote">Аппаратный streaming пока остаётся отдельной проверяемой границей. Используется только volatile Direct RGB: EEPROM, remap, macro и firmware не затрагиваются.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="section" id="section-profiles">
+        <div class="profiles-layout">
+          <section class="device-page-card profile-card-wide">
+            <span class="panel-kicker">HOST PROFILES</span>
+            <h2>Профили KD3B Control</h2>
+            <p class="section-description">Профиль сохраняет режим, параметры эффекта и полный Direct RGB кадр. Эти профили принадлежат приложению и не выдаются за встроенные профили клавиатуры.</p>
+            <div class="profile-create-row">
+              <input class="text-input" id="profile-name" type="text" maxlength="48" placeholder="Название профиля" />
+              <button class="action-button" type="button" id="save-profile">Сохранить текущее</button>
+            </div>
+            <div class="profile-list" id="profile-list"></div>
+          </section>
+
+          <section class="device-page-card factory-card">
+            <span class="panel-kicker">FACTORY / ONBOARD</span>
+            <h2>Fn-слой и встроенные профили</h2>
+            <div class="boundary-note warning-note">
+              <strong>Не смешиваем с host-профилями</strong>
+              <p>У семейства Dark Project этого поколения есть Default Layer, Fn-слой и встроенная память. Для KD3B rev.2 точные заводские назначения и протокол чтения/записи ещё не восстановлены, поэтому приложение их не перезаписывает и не изображает известными.</p>
+            </div>
+            <div class="factory-grid">
+              <div class="factory-item"><strong>Default Layer</strong><span>Заводская базовая раскладка. Отображение и безопасный readback ещё предстоит восстановить.</span></div>
+              <div class="factory-item"><strong>Fn Layer</strong><span>OEM ПО этого поколения отдельно редактирует Fn1 Layer, включая мультимедиа. Точный KD3B набор нужно подтвердить.</span></div>
+              <div class="factory-item"><strong>Onboard profiles</strong><span>Есть свидетельства нескольких аппаратных профилей у семейства KD1/KD3 rev.2. Точные сочетания KD3B не хардкодим без модельного источника или capture.</span></div>
+              <div class="factory-item"><strong>Macros / remap</strong><span>Оставлены read-only boundary до восстановления формата и семантики persistence.</span></div>
             </div>
           </section>
         </div>
