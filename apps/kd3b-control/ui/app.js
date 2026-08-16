@@ -1,7 +1,6 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
-const PREVIEW_INTERVAL_MS = 80;
-const SCROLL_COOLDOWN_MS = 140;
+const PREVIEW_INTERVAL_MS = 50;
 const HARDWARE_STATUS_INTERVAL_MS = 1000;
 
 const state = {
@@ -17,7 +16,6 @@ const state = {
   previewInFlight: false,
   previewEnabled: true,
   previewLastAt: 0,
-  scrollPauseUntil: 0,
   activeSection: "lighting",
   lastFrame: [],
   deviceReady: false,
@@ -37,7 +35,6 @@ const primary = document.querySelector("#primary-color");
 const secondary = document.querySelector("#secondary-color");
 const brightness = document.querySelector("#brightness");
 const speed = document.querySelector("#speed");
-const workspace = document.querySelector(".workspace");
 
 const VISUAL_LAYOUT = buildVisualLayout();
 
@@ -45,7 +42,6 @@ async function boot() {
   bindNavigation();
   bindControls();
   bindHardwareControls();
-  bindPerformanceGuards();
   if (!invoke) {
     setDeviceFailure("Tauri IPC недоступен. Запусти desktop-приложение, а не index.html напрямую.");
     frameStatus.textContent = "Tauri IPC недоступен";
@@ -87,12 +83,6 @@ function bindNavigation() {
     await refreshDevice();
     await refreshHardwareStatus();
   });
-}
-
-function bindPerformanceGuards() {
-  workspace?.addEventListener("scroll", () => {
-    state.scrollPauseUntil = performance.now() + SCROLL_COOLDOWN_MS;
-  }, { passive: true });
 }
 
 function bindControls() {
@@ -235,7 +225,6 @@ function previewLoop(timestamp) {
   if (
     document.hidden ||
     state.activeSection !== "lighting" ||
-    timestamp < state.scrollPauseUntil ||
     timestamp - state.previewLastAt < PREVIEW_INTERVAL_MS
   ) {
     return;
