@@ -14,6 +14,19 @@
 .lighting-mode-bar strong { display: block; margin-top: 4px; font-size: 14px; }
 .mode-segmented { width: min(360px, 46%); }
 
+.keyboard-color-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+.keyboard.canvas-preview .key {
+  z-index: 1;
+  background-color: transparent !important;
+}
+.keyboard.canvas-preview .key::after { display: none; }
 .keyboard.direct-edit .key { cursor: pointer; }
 .keyboard.direct-edit .key:hover { outline: 1px solid rgba(150, 190, 255, .7); outline-offset: -2px; }
 .key.selected {
