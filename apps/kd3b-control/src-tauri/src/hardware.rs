@@ -172,7 +172,8 @@ pub(crate) fn apply_static_frame(
     let frame = parse_frame(colors)?;
     controller.stop_worker("preparing one-shot direct RGB frame")?;
 
-    let mut transport = open_configuration_interface_transport().map_err(|error| error.to_string())?;
+    let mut transport =
+        open_configuration_interface_transport().map_err(|error| error.to_string())?;
     let selected = transport.selected_metadata().clone();
     transport
         .set_direct_rgb(&frame)
@@ -273,7 +274,10 @@ fn run_effect_worker(shared: Arc<SharedState>, stop: Arc<AtomicBool>, config: Ef
     let mut transport = match open_configuration_interface_transport() {
         Ok(transport) => transport,
         Err(error) => {
-            record_worker_error(&shared, format!("failed to open configuration interface: {error}"));
+            record_worker_error(
+                &shared,
+                format!("failed to open configuration interface: {error}"),
+            );
             return;
         }
     };
