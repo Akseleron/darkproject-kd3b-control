@@ -129,121 +129,67 @@ impl UsbPcapPacket {
     }
 }
 
+#[derive(Debug, Default)]
+struct SectionState {
+    endianness: Option<Endianness>,
+    section_index: Option<usize>,
+    interfaces: Vec<u16>,
+}
+
+/// Parses the pcapng block structure needed by the KD3B research tooling.
+///
+/// # Errors
+///
+/// Returns [`ParseError`] when the block stream is truncated, structurally invalid, references an
+/// unknown interface, or contains lengths that cannot be represented safely.
 pub fn parse_pcapng(bytes: &[u8]) -> Result<PcapNgCapture, ParseError> {
     let mut capture = PcapNgCapture::default();
+    let mut state = SectionState::default();
     let mut offset = 0usize;
-    let mut endianness = None;
-    let mut current_section = None;
-    let mut interfaces = Vec::<u16>::new();
 
     while offset < bytes.len() {
         if bytes.len() - offset < 12 {
             return Err(ParseError::new(offset, "truncated block header"));
         }
-
         let raw_type = array4(bytes, offset)?;
-        let is_section_header = u32::from_le_bytes(raw_type) == SECTION_HEADER_BLOCK;
-
-        if is_section_header {
-            let byte_order_bytes = array4(bytes, offset + 8)?;
-            let section_endianness = if u32::from_le_bytes(byte_order_bytes) == BYTE_ORDER_MAGIC {
-                Endianness::Little
-            } else if u32::from_be_bytes(byte_order_bytes) == BYTE_ORDER_MAGIC {
-                Endianness::Big
-            } else {
-                return Err(ParseError::new(
-                    offset + 8,
-                    "invalid section byte-order magic",
-                ));
-            };
-
-            let total_length = block_length(bytes, offset, section_endianness)?;
-            validate_block(bytes, offset, total_length, section_endianness)?;
-            if total_length < 28 {
-                return Err(ParseError::new(offset, "section header block is too short"));
-            }
-
-            endianness = Some(section_endianness);
-            current_section = Some(capture.section_count);
+        if u32::from_le_bytes(raw_type) == SECTION_HEADER_BLOCK {
+            let (endianness, total_length) = parse_section_header(bytes, offset)?;
+            state.endianness = Some(endianness);
+            state.section_index = Some(capture.section_count);
+            state.interfaces.clear();
             capture.section_count += 1;
-            interfaces.clear();
             offset += total_length;
             continue;
         }
 
-        let section_endianness = endianness.ok_or_else(|| {
+        let endianness = state.endianness.ok_or_else(|| {
             ParseError::new(
                 offset,
                 "packet capture does not start with a section header",
             )
         })?;
-        let section_index = current_section.expect("endianness implies an active section");
-        let block_type = section_endianness.read_u32(raw_type);
-        let total_length = block_length(bytes, offset, section_endianness)?;
-        validate_block(bytes, offset, total_length, section_endianness)?;
+        let section_index = state.section_index.ok_or_else(|| {
+            ParseError::new(offset, "capture parser has no active section index")
+        })?;
+        let block_type = endianness.read_u32(raw_type);
+        let total_length = block_length(bytes, offset, endianness)?;
+        validate_block(bytes, offset, total_length, endianness)?;
         let body_start = offset + 8;
-        let body_end = offset + total_length - 4;
-        let body = &bytes[body_start..body_end];
+        let body = &bytes[body_start..offset + total_length - 4];
 
         match block_type {
             INTERFACE_DESCRIPTION_BLOCK => {
-                if body.len() < 8 {
-                    return Err(ParseError::new(
-                        body_start,
-                        "interface description block is too short",
-                    ));
-                }
-                let linktype = section_endianness.read_u16([body[0], body[1]]);
-                interfaces.push(linktype);
+                let linktype = parse_interface_description(body, body_start, endianness)?;
+                state.interfaces.push(linktype);
                 capture.interface_count += 1;
             }
-            ENHANCED_PACKET_BLOCK => {
-                if body.len() < 20 {
-                    return Err(ParseError::new(
-                        body_start,
-                        "enhanced packet block is too short",
-                    ));
-                }
-                let interface_id =
-                    section_endianness.read_u32([body[0], body[1], body[2], body[3]]);
-                let captured_len =
-                    section_endianness.read_u32([body[12], body[13], body[14], body[15]]);
-                let original_len =
-                    section_endianness.read_u32([body[16], body[17], body[18], body[19]]);
-                let interface_index = usize::try_from(interface_id).map_err(|_| {
-                    ParseError::new(body_start, "interface id does not fit this platform")
-                })?;
-                let linktype = *interfaces.get(interface_index).ok_or_else(|| {
-                    ParseError::new(
-                        body_start,
-                        format!("enhanced packet references unknown interface {interface_id}"),
-                    )
-                })?;
-                let captured_len_usize = usize::try_from(captured_len).map_err(|_| {
-                    ParseError::new(
-                        body_start + 12,
-                        "captured length does not fit this platform",
-                    )
-                })?;
-                let packet_end = 20usize.checked_add(captured_len_usize).ok_or_else(|| {
-                    ParseError::new(body_start + 12, "captured length overflows address space")
-                })?;
-                if packet_end > body.len() {
-                    return Err(ParseError::new(
-                        body_start + 20,
-                        "enhanced packet data is truncated",
-                    ));
-                }
-
-                capture.packets.push(CapturedPacket {
-                    section_index,
-                    interface_id,
-                    linktype,
-                    captured_len,
-                    original_len,
-                    data: body[20..packet_end].to_vec(),
-                });
-            }
+            ENHANCED_PACKET_BLOCK => capture.packets.push(parse_enhanced_packet(
+                body,
+                body_start,
+                endianness,
+                section_index,
+                &state.interfaces,
+            )?),
             _ => {}
         }
 
@@ -253,10 +199,98 @@ pub fn parse_pcapng(bytes: &[u8]) -> Result<PcapNgCapture, ParseError> {
     if capture.section_count == 0 {
         return Err(ParseError::new(0, "capture contains no section header"));
     }
-
     Ok(capture)
 }
 
+fn parse_section_header(bytes: &[u8], offset: usize) -> Result<(Endianness, usize), ParseError> {
+    let byte_order_bytes = array4(bytes, offset + 8)?;
+    let endianness = if u32::from_le_bytes(byte_order_bytes) == BYTE_ORDER_MAGIC {
+        Endianness::Little
+    } else if u32::from_be_bytes(byte_order_bytes) == BYTE_ORDER_MAGIC {
+        Endianness::Big
+    } else {
+        return Err(ParseError::new(
+            offset + 8,
+            "invalid section byte-order magic",
+        ));
+    };
+    let total_length = block_length(bytes, offset, endianness)?;
+    validate_block(bytes, offset, total_length, endianness)?;
+    if total_length < 28 {
+        return Err(ParseError::new(offset, "section header block is too short"));
+    }
+    Ok((endianness, total_length))
+}
+
+fn parse_interface_description(
+    body: &[u8],
+    body_start: usize,
+    endianness: Endianness,
+) -> Result<u16, ParseError> {
+    if body.len() < 8 {
+        return Err(ParseError::new(
+            body_start,
+            "interface description block is too short",
+        ));
+    }
+    Ok(endianness.read_u16([body[0], body[1]]))
+}
+
+fn parse_enhanced_packet(
+    body: &[u8],
+    body_start: usize,
+    endianness: Endianness,
+    section_index: usize,
+    interfaces: &[u16],
+) -> Result<CapturedPacket, ParseError> {
+    if body.len() < 20 {
+        return Err(ParseError::new(
+            body_start,
+            "enhanced packet block is too short",
+        ));
+    }
+    let interface_id = endianness.read_u32([body[0], body[1], body[2], body[3]]);
+    let captured_len = endianness.read_u32([body[12], body[13], body[14], body[15]]);
+    let original_len = endianness.read_u32([body[16], body[17], body[18], body[19]]);
+    let interface_index = usize::try_from(interface_id)
+        .map_err(|_| ParseError::new(body_start, "interface id does not fit this platform"))?;
+    let linktype = *interfaces.get(interface_index).ok_or_else(|| {
+        ParseError::new(
+            body_start,
+            format!("enhanced packet references unknown interface {interface_id}"),
+        )
+    })?;
+    let captured_len_usize = usize::try_from(captured_len).map_err(|_| {
+        ParseError::new(
+            body_start + 12,
+            "captured length does not fit this platform",
+        )
+    })?;
+    let packet_end = 20usize.checked_add(captured_len_usize).ok_or_else(|| {
+        ParseError::new(body_start + 12, "captured length overflows address space")
+    })?;
+    if packet_end > body.len() {
+        return Err(ParseError::new(
+            body_start + 20,
+            "enhanced packet data is truncated",
+        ));
+    }
+
+    Ok(CapturedPacket {
+        section_index,
+        interface_id,
+        linktype,
+        captured_len,
+        original_len,
+        data: body[20..packet_end].to_vec(),
+    })
+}
+
+/// Parses one packet carried by the USBPcap data-link type.
+///
+/// # Errors
+///
+/// Returns [`ParseError`] if a USBPcap packet has a truncated or inconsistent header or length.
 pub fn parse_usbpcap_packet(packet: &CapturedPacket) -> Result<Option<UsbPcapPacket>, ParseError> {
     if packet.linktype != LINKTYPE_USBPCAP {
         return Ok(None);
@@ -327,6 +361,11 @@ pub fn parse_usbpcap_packet(packet: &CapturedPacket) -> Result<Option<UsbPcapPac
     }))
 }
 
+/// Parses every USBPcap-linked packet in a capture, ignoring other link types.
+///
+/// # Errors
+///
+/// Returns [`ParseError`] when any USBPcap packet is structurally invalid.
 pub fn usbpcap_packets(capture: &PcapNgCapture) -> Result<Vec<UsbPcapPacket>, ParseError> {
     capture
         .packets
@@ -336,6 +375,11 @@ pub fn usbpcap_packets(capture: &PcapNgCapture) -> Result<Vec<UsbPcapPacket>, Pa
         .collect()
 }
 
+/// Extracts non-empty OUT payloads sent to the KD3B configuration endpoint number 3.
+///
+/// # Errors
+///
+/// Returns [`ParseError`] when a USBPcap packet is structurally invalid.
 pub fn kd3b_configuration_out_payloads(
     capture: &PcapNgCapture,
 ) -> Result<Vec<Vec<u8>>, ParseError> {
@@ -393,8 +437,11 @@ fn validate_block(
 }
 
 fn array4(bytes: &[u8], offset: usize) -> Result<[u8; 4], ParseError> {
+    let end = offset
+        .checked_add(4)
+        .ok_or_else(|| ParseError::new(offset, "four-byte read overflows address space"))?;
     let slice = bytes
-        .get(offset..offset + 4)
+        .get(offset..end)
         .ok_or_else(|| ParseError::new(offset, "expected four bytes"))?;
     Ok([slice[0], slice[1], slice[2], slice[3]])
 }
