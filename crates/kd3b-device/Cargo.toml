@@ -8,5 +8,8 @@ rust-version.workspace = true
 [dependencies]
 kd3b-protocol = { path = "../kd3b-protocol" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+hidapi = { version = "=2.6.6", default-features = false, features = ["linux-static-libusb"] }
+
 [lints]
 workspace = true

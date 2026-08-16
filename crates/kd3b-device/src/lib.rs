@@ -1,9 +1,13 @@
 //! Device orchestration and transport abstractions for KD3B.
-//! The initial repository baseline intentionally contains no real HID backend.
 
+mod discovery;
 mod mock;
 mod transport;
 
+pub use discovery::{
+    BusType, DeviceDiscoveryError, DiscoveredHidInterface, enumerate_target_hid_interfaces,
+    escape_hid_path, filter_target_interfaces,
+};
 pub use mock::{MockTransport, MockTransportError};
 pub use transport::{PacketTransport, write_direct_rgb};
 

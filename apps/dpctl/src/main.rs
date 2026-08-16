@@ -1,9 +1,8 @@
-use kd3b_device::TargetIdentity;
+use std::process::ExitCode;
 
-fn main() {
-    let target = TargetIdentity::default();
-    println!(
-        "dpctl baseline: target {:04x}:{:04x}; hardware access is not implemented yet",
-        target.vendor_id, target.product_id
-    );
+fn main() -> ExitCode {
+    let output = dpctl::run(std::env::args().skip(1));
+    print!("{}", output.stdout);
+    eprint!("{}", output.stderr);
+    ExitCode::from(output.exit_code)
 }
