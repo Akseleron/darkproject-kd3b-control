@@ -1,0 +1,12 @@
+[package]
+name = "kd3b-effects"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+kd3b-protocol = { path = "../kd3b-protocol" }
+
+[lints]
+workspace = true

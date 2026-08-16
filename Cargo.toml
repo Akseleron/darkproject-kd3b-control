@@ -2,6 +2,7 @@
 members = [
     "crates/kd3b-protocol",
     "crates/kd3b-device",
+    "crates/kd3b-effects",
     "apps/dpctl",
     "tools/kd3b-capture",
 ]
