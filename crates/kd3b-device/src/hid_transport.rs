@@ -1,11 +1,12 @@
 use std::{error::Error, fmt};
 
 use hidapi::{HidApi, HidDevice, HidError};
+use kd3b_protocol::{LOGICAL_KEY_COUNT, Rgb8, encode_direct_rgb};
 
 use crate::{
     ConfigurationInterfaceIndex, ConfigurationInterfaceSelectionError, DeviceDiscoveryError,
     DiscoveredHidInterface, PacketTransport, discovery::enumerate_target_runtime_hid_interfaces,
-    select_configuration_interface,
+    select_configuration_interface, write_direct_rgb,
 };
 
 /// Failure to open the selected configuration interface as a retained transport.
@@ -90,10 +91,9 @@ impl Error for HidPacketWriteError {
 
 /// Retained interface-2 HIDAPI transport.
 ///
-/// Construction is deliberately separate from packet encoding. The transport
-/// accepts only already-encoded packet bytes through the internal
-/// [`PacketTransport`] boundary; normal CLI/UI code should use typed higher-level
-/// RGB operations rather than exposing arbitrary packet sending.
+/// Construction is deliberately separate from packet encoding. Normal CLI/UI
+/// code should use typed methods such as [`Self::set_direct_rgb`] instead of
+/// exposing arbitrary packet sending.
 pub struct HidPacketTransport {
     _api: HidApi,
     device: HidDevice,
@@ -105,6 +105,19 @@ impl HidPacketTransport {
     #[must_use]
     pub const fn selected_metadata(&self) -> &DiscoveredHidInterface {
         &self.metadata
+    }
+
+    /// Encodes and writes one complete 87-key direct-RGB frame in the documented
+    /// packet-A then packet-B order.
+    ///
+    /// # Errors
+    /// Returns the first HIDAPI backend or short-write error and does not retry.
+    pub fn set_direct_rgb(
+        &mut self,
+        frame: &[Rgb8; LOGICAL_KEY_COUNT],
+    ) -> Result<(), HidPacketWriteError> {
+        let packets = encode_direct_rgb(frame);
+        write_direct_rgb(self, &packets)
     }
 }
 
@@ -126,8 +139,7 @@ impl PacketTransport for HidPacketTransport {
 /// that record by its retained original HIDAPI path.
 ///
 /// This function does not write any HID report. A returned transport becomes
-/// capable of writes only when a typed higher-level operation later calls the
-/// [`PacketTransport`] implementation.
+/// capable of writes only when a typed higher-level operation later requests one.
 ///
 /// # Errors
 /// Returns a typed discovery, selection, pairing, or HIDAPI open failure.

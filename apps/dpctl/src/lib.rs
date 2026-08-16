@@ -10,15 +10,17 @@ use kd3b_device::{
 use devices_cli::render_interfaces;
 use info_cli::render_info;
 use probe_cli::ProbeSession;
+use rgb_cli::RgbSession;
 
 mod devices_cli;
 mod info_cli;
 mod probe_cli;
 #[cfg(test)]
 mod probe_cli_tests;
+mod rgb_cli;
 
-const USAGE: &str = "Usage: dpctl <devices|info|probe>\n";
-const HELP: &str = "Usage: dpctl <devices|info|probe>\n\nCommands:\n  devices  Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  info     Summarize current read-only target/interface status.\n  probe    Interactively prepare and open interface 2 without requesting HID report operations.\n";
+const USAGE: &str = "Usage: dpctl <devices|info|probe|rgb key F1 ff0000>\n";
+const HELP: &str = "Usage: dpctl <devices|info|probe|rgb key F1 ff0000>\n\nCommands:\n  devices             Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  info                Summarize current read-only target/interface status.\n  probe               Interactively prepare and open interface 2 without requesting HID report operations.\n  rgb key F1 ff0000   Hardware-gated first direct-RGB validation: F1 red, all other mapped keys black/off.\n";
 
 /// Complete process output for one `dpctl` invocation.
 #[derive(Debug, PartialEq, Eq)]
@@ -33,10 +35,11 @@ enum Command {
     Devices,
     Info,
     Probe,
+    RgbKeyF1Red,
     UsageError(String),
 }
 
-/// Dispatches arguments through the real read-only device metadata enumerator.
+/// Dispatches arguments through the real device integrations selected by the command.
 pub fn run<I, S>(arguments: I) -> CommandOutput
 where
     I: IntoIterator<Item = S>,
@@ -52,11 +55,19 @@ where
             ProbeSession::new(&mut input, &mut output, is_interactive_stdin)
                 .run(prepare_configuration_interface_probe)
         }
-        command => run_non_probe(command, enumerate_target_hid_interfaces),
+        Command::RgbKeyF1Red => {
+            let stdin = io::stdin();
+            let is_interactive_stdin = stdin.is_terminal();
+            let mut input = stdin.lock();
+            let stdout = io::stdout();
+            let mut output = stdout.lock();
+            RgbSession::new(&mut input, &mut output, is_interactive_stdin).run_real()
+        }
+        command => run_non_interactive(command, enumerate_target_hid_interfaces),
     }
 }
 
-/// Dispatches arguments with an injected metadata enumerator for offline callers and tests.
+/// Dispatches non-hardware-write arguments with an injected metadata enumerator for tests.
 pub fn run_with_discovery<I, S, F, E>(arguments: I, discover: F) -> CommandOutput
 where
     I: IntoIterator<Item = S>,
@@ -64,10 +75,10 @@ where
     F: FnOnce() -> Result<Vec<DiscoveredHidInterface>, E>,
     E: fmt::Display,
 {
-    run_non_probe(parse_arguments(arguments), discover)
+    run_non_interactive(parse_arguments(arguments), discover)
 }
 
-fn run_non_probe<F, E>(command: Command, discover: F) -> CommandOutput
+fn run_non_interactive<F, E>(command: Command, discover: F) -> CommandOutput
 where
     F: FnOnce() -> Result<Vec<DiscoveredHidInterface>, E>,
     E: fmt::Display,
@@ -108,11 +119,8 @@ where
             },
             Err(error) => discovery_failure(error),
         },
-        Command::Probe => CommandOutput {
-            exit_code: 2,
-            stdout: String::new(),
-            stderr: format!("error: probe requires the interactive dispatcher\n{USAGE}"),
-        },
+        Command::Probe => interactive_dispatch_required("probe"),
+        Command::RgbKeyF1Red => interactive_dispatch_required("RGB hardware write"),
         Command::UsageError(error) => CommandOutput {
             exit_code: 2,
             stdout: String::new(),
@@ -131,6 +139,14 @@ fn discovery_failure(error: impl fmt::Display) -> CommandOutput {
     }
 }
 
+fn interactive_dispatch_required(operation: &str) -> CommandOutput {
+    CommandOutput {
+        exit_code: 2,
+        stdout: String::new(),
+        stderr: format!("error: {operation} requires the interactive dispatcher\n{USAGE}"),
+    }
+}
+
 fn parse_arguments<I, S>(arguments: I) -> Command
 where
     I: IntoIterator<Item = S>,
@@ -142,7 +158,27 @@ where
     };
     let command = command.as_ref();
 
-    match (command, arguments.next()) {
+    if command == "rgb" {
+        let mode = arguments.next();
+        let key = arguments.next();
+        let color = arguments.next();
+        let extra = arguments.next();
+        if mode.as_ref().map(AsRef::as_ref) == Some("key")
+            && key.as_ref().map(AsRef::as_ref) == Some("F1")
+            && color.as_ref().map(AsRef::as_ref) == Some("ff0000")
+            && extra.is_none()
+        {
+            return Command::RgbKeyF1Red;
+        }
+
+        return Command::UsageError(
+            "first hardware-gated RGB validation currently accepts exactly 'rgb key F1 ff0000'"
+                .to_owned(),
+        );
+    }
+
+    let extra = arguments.next();
+    match (command, extra) {
         ("--help" | "-h" | "help", None) => Command::Help,
         ("devices", None) => Command::Devices,
         ("info", None) => Command::Info,
@@ -172,14 +208,32 @@ mod tests {
     use super::{Command, HELP, parse_arguments, run_with_discovery};
 
     #[test]
+    fn gated_rgb_command_is_recognized_only_in_exact_first_write_form() {
+        assert!(matches!(
+            parse_arguments(["rgb", "key", "F1", "ff0000"]),
+            Command::RgbKeyF1Red
+        ));
+        for invalid in [
+            vec!["rgb"],
+            vec!["rgb", "key", "F1"],
+            vec!["rgb", "key", "F1", "FF0000"],
+            vec!["rgb", "key", "F2", "ff0000"],
+            vec!["rgb", "key", "F1", "ff0000", "extra"],
+        ] {
+            assert!(matches!(
+                parse_arguments(invalid),
+                Command::UsageError(_)
+            ));
+        }
+    }
+
+    #[test]
     fn info_and_probe_are_recognized_only_without_extra_arguments() {
-        // Given / When
         let info = parse_arguments(["info"]);
         let info_with_extra = parse_arguments(["info", "extra"]);
         let probe = parse_arguments(["probe"]);
         let probe_with_extra = parse_arguments(["probe", "extra"]);
 
-        // Then
         assert!(matches!(info, Command::Info));
         assert!(matches!(info_with_extra, Command::UsageError(_)));
         assert!(matches!(probe, Command::Probe));
@@ -188,17 +242,14 @@ mod tests {
 
     #[test]
     fn help_succeeds_without_discovery_when_help_form_is_used() {
-        // Given
         for arguments in [["--help"], ["-h"], ["help"]] {
             let discovery_called = Cell::new(false);
 
-            // When
             let output = run_with_discovery(arguments, || {
                 discovery_called.set(true);
                 Ok::<_, &str>(Vec::new())
             });
 
-            // Then
             assert_eq!(output.exit_code, 0);
             assert_eq!(output.stdout, HELP);
             assert_eq!(output.stderr, "");
@@ -208,44 +259,37 @@ mod tests {
 
     #[test]
     fn usage_fails_without_discovery_when_arguments_are_invalid() {
-        // Given
         let cases: &[(&[&str], &str)] = &[
             (
                 &[],
-                "error: missing command\nUsage: dpctl <devices|info|probe>\n",
+                "error: missing command\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
             ),
             (
                 &["unknown"],
-                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe>\n",
-            ),
-            (
-                &["unknown", "extra"],
-                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe>\n",
+                "error: unknown command 'unknown'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
             ),
             (
                 &["devices", "extra"],
-                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|info|probe>\n",
+                "error: unexpected argument 'extra' after 'devices'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
             ),
             (
                 &["info", "extra"],
-                "error: unexpected argument 'extra' after 'info'\nUsage: dpctl <devices|info|probe>\n",
+                "error: unexpected argument 'extra' after 'info'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
             ),
             (
                 &["probe", "extra"],
-                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|info|probe>\n",
+                "error: unexpected argument 'extra' after 'probe'\nUsage: dpctl <devices|info|probe|rgb key F1 ff0000>\n",
             ),
         ];
 
         for (arguments, expected_stderr) in cases {
             let discovery_called = Cell::new(false);
 
-            // When
             let output = run_with_discovery(arguments.iter().copied(), || {
                 discovery_called.set(true);
                 Ok::<_, &str>(Vec::new())
             });
 
-            // Then
             assert_eq!(output.exit_code, 2);
             assert_eq!(output.stdout, "");
             assert_eq!(output.stderr, *expected_stderr);
@@ -255,13 +299,10 @@ mod tests {
 
     #[test]
     fn devices_reports_zero_matches_when_discovery_is_empty() {
-        // Given
         let expected = "Target: Dark Project KD3B rev.2 (VID:PID 195d:2061)\nMatches: 0\nNo matching HID interfaces found.\n";
 
-        // When
         let output = run_with_discovery(["devices"], || Ok::<_, &str>(Vec::new()));
 
-        // Then
         assert_eq!(output.exit_code, 0);
         assert_eq!(output.stdout, expected);
         assert_eq!(output.stderr, "");
@@ -269,17 +310,14 @@ mod tests {
 
     #[test]
     fn info_reports_current_unique_candidate_without_opening_it() {
-        // Given
         let interfaces = vec![
             interface(0, "1-11:1.0"),
             interface(1, "1-11:1.1"),
             interface(2, "1-11:1.2"),
         ];
 
-        // When
         let output = run_with_discovery(["info"], || Ok::<_, &str>(interfaces));
 
-        // Then
         assert_eq!(output.exit_code, 0);
         assert!(output.stdout.contains("Matching HID interfaces: 3\n"));
         assert!(
@@ -293,7 +331,6 @@ mod tests {
 
     #[test]
     fn devices_renders_every_record_in_source_order_when_matches_exist() {
-        // Given
         let interfaces = vec![
             DiscoveredHidInterface {
                 interface_number: 2,
@@ -328,10 +365,8 @@ mod tests {
             "Path: /safe\\path\\x1b\nCandidate: none\n",
         );
 
-        // When
         let output = run_with_discovery(["devices"], || Ok::<_, &str>(interfaces));
 
-        // Then
         assert_eq!(output.exit_code, 0);
         assert_eq!(output.stdout, expected);
         assert_eq!(output.stderr, "");
@@ -339,18 +374,15 @@ mod tests {
 
     #[test]
     fn devices_reports_safety_context_when_discovery_fails() {
-        // Given
         let expected = concat!(
             "error: could not enumerate KD3B HID interfaces: test enumeration failure\n",
             "dpctl made no application-level HID handle or report request. The approved HIDAPI/libusb backend may open visible HID devices while collecting metadata.\n",
         );
 
-        // When
         let output = run_with_discovery(["devices"], || {
             Err::<Vec<DiscoveredHidInterface>, _>("test enumeration failure")
         });
 
-        // Then
         assert_eq!(output.exit_code, 1);
         assert_eq!(output.stdout, "");
         assert_eq!(output.stderr, expected);
