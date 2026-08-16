@@ -19,7 +19,8 @@ mod probe_cli;
 mod probe_cli_tests;
 mod rgb_cli;
 
-const USAGE: &str = "Usage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n";
+const USAGE: &str =
+    "Usage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n";
 const HELP: &str = "Usage: dpctl <devices|info|probe|rgb key <KEY> <RRGGBB>|rgb solid <RRGGBB>|rgb off>\n\nCommands:\n  devices                    Enumerate read-only HID metadata for Dark Project KD3B rev.2 (195d:2061).\n  info                       Summarize current read-only target/interface status.\n  probe                      Interactively prepare and open interface 2 without requesting HID report operations.\n  rgb key <KEY> <RRGGBB>     Set one mapped key to a color and all other mapped keys black/off.\n  rgb solid <RRGGBB>         Set all 87 mapped keys to one color.\n  rgb off                    Set all 87 mapped keys black/off.\n\nRGB key names use enum-style catalogue names such as F1, A, Space, LeftShift, and PrintScreen. Colors are exactly six hexadecimal digits without '#'. RGB writes are volatile and interactively confirmed.\n";
 
 /// Complete process output for one `dpctl` invocation.

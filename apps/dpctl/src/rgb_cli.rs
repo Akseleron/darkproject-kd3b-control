@@ -332,12 +332,8 @@ mod tests {
 
     #[test]
     fn key_command_builds_one_lit_key_frame() {
-        let command = RgbCommand::parse(&[
-            "key".to_owned(),
-            "F1".to_owned(),
-            "ff0000".to_owned(),
-        ])
-        .expect("valid key command");
+        let command = RgbCommand::parse(&["key".to_owned(), "F1".to_owned(), "ff0000".to_owned()])
+            .expect("valid key command");
         let frame = command.frame();
 
         assert_eq!(frame[Key::F1.index()], Rgb8::new(255, 0, 0));
@@ -357,7 +353,10 @@ mod tests {
             .expect("valid solid command");
         let off = RgbCommand::parse(&["off".to_owned()]).expect("valid off command");
 
-        assert_eq!(solid.frame(), [Rgb8::new(0x12, 0x34, 0x56); LOGICAL_KEY_COUNT]);
+        assert_eq!(
+            solid.frame(),
+            [Rgb8::new(0x12, 0x34, 0x56); LOGICAL_KEY_COUNT]
+        );
         assert_eq!(off.frame(), [Rgb8::new(0, 0, 0); LOGICAL_KEY_COUNT]);
         assert_eq!(solid.confirmation(), "WRITE RGB SOLID 123456");
         assert_eq!(off.confirmation(), "WRITE RGB OFF");
