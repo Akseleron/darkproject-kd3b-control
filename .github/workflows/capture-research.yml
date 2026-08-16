@@ -25,12 +25,26 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p captures reports
-          base='https://gitlab.com/CalcProgrammer1/OpenRGB/-/uploads'
           while read -r hash filename; do
             echo "Downloading ${filename}"
-            curl --fail --location --retry 4 --retry-delay 2 \
-              "${base}/${hash}/${filename}" \
-              --output "captures/${filename}"
+            downloaded=0
+            for base in \
+              'https://gitlab.com/uploads' \
+              'https://gitlab.com/CalcProgrammer1/OpenRGB/uploads' \
+              'https://gitlab.com/CalcProgrammer1/OpenRGB/-/uploads'; do
+              url="${base}/${hash}/${filename}"
+              echo "  trying ${url}"
+              if curl --fail --location --retry 2 --retry-delay 1 \
+                --user-agent 'Mozilla/5.0 KD3B protocol research' \
+                "${url}" --output "captures/${filename}"; then
+                downloaded=1
+                break
+              fi
+            done
+            if [[ "${downloaded}" != 1 ]]; then
+              echo "Could not download ${filename}" >&2
+              exit 1
+            fi
           done <<'EOF'
           b506fc715aa1b396c6e4fe8d5e1b6882 KD3Brev.2_ReportDescriptor.pcapng
           9546918bdf1f7856bbbe84fa83b7526e RED.pcapng
