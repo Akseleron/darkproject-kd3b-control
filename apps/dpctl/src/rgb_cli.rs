@@ -13,8 +13,7 @@ use kd3b_protocol::{Key, LOGICAL_KEY_COUNT, Rgb8};
 use crate::CommandOutput;
 
 const CONFIRMATION: &str = "WRITE F1 FF0000";
-const EXPECTED_RESULT: &str =
-    "Expected visible result if the documented direct-RGB behavior matches this keyboard: F1 becomes red and every other mapped key becomes black/off.";
+const EXPECTED_RESULT: &str = "Expected visible result if the documented direct-RGB behavior matches this keyboard: F1 becomes red and every other mapped key becomes black/off.";
 
 #[derive(Debug)]
 enum FirstRgbWriteError {
@@ -29,7 +28,10 @@ enum FirstRgbWriteError {
 impl fmt::Display for FirstRgbWriteError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Open(source) => write!(formatter, "could not open configuration transport: {source}"),
+            Self::Open(source) => write!(
+                formatter,
+                "could not open configuration transport: {source}"
+            ),
             Self::SelectionChanged { expected, actual } => write!(
                 formatter,
                 "selected interface changed after confirmation; expected interface {} at {}, got interface {} at {}; no RGB packet was written",
@@ -41,7 +43,8 @@ impl fmt::Display for FirstRgbWriteError {
 }
 
 fn perform_f1_red_write(expected: &DiscoveredHidInterface) -> Result<(), FirstRgbWriteError> {
-    let mut transport = open_configuration_interface_transport().map_err(FirstRgbWriteError::Open)?;
+    let mut transport =
+        open_configuration_interface_transport().map_err(FirstRgbWriteError::Open)?;
     if transport.selected_metadata() != expected {
         return Err(FirstRgbWriteError::SelectionChanged {
             expected: Box::new(expected.clone()),
@@ -96,11 +99,17 @@ where
 
         let interfaces = match discover() {
             Ok(interfaces) => interfaces,
-            Err(error) => return failure(&format!("could not enumerate target interfaces: {error}")),
+            Err(error) => {
+                return failure(&format!("could not enumerate target interfaces: {error}"));
+            }
         };
         let selected_index = match select_configuration_interface(&interfaces) {
             Ok(selected_index) => selected_index,
-            Err(error) => return failure(&format!("could not select configuration interface: {error}")),
+            Err(error) => {
+                return failure(&format!(
+                    "could not select configuration interface: {error}"
+                ));
+            }
         };
         let selected = interfaces[selected_index.get()].clone();
 
@@ -114,7 +123,9 @@ where
             Err(error) => return failure(&format!("could not read RGB confirmation: {error}")),
         };
         if bytes_read == 0 {
-            return failure("confirmation input ended before a line was read; no RGB packet was written");
+            return failure(
+                "confirmation input ended before a line was read; no RGB packet was written",
+            );
         }
         let confirmation = confirmation.strip_suffix('\n').unwrap_or(&confirmation);
         let confirmation = confirmation.strip_suffix('\r').unwrap_or(confirmation);

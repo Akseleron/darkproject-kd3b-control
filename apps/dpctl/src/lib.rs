@@ -163,9 +163,11 @@ where
         let key = arguments.next();
         let color = arguments.next();
         let extra = arguments.next();
-        if mode.as_ref().map(AsRef::as_ref) == Some("key")
-            && key.as_ref().map(AsRef::as_ref) == Some("F1")
-            && color.as_ref().map(AsRef::as_ref) == Some("ff0000")
+        if mode.as_ref().is_some_and(|value| value.as_ref() == "key")
+            && key.as_ref().is_some_and(|value| value.as_ref() == "F1")
+            && color
+                .as_ref()
+                .is_some_and(|value| value.as_ref() == "ff0000")
             && extra.is_none()
         {
             return Command::RgbKeyF1Red;
@@ -220,10 +222,7 @@ mod tests {
             vec!["rgb", "key", "F2", "ff0000"],
             vec!["rgb", "key", "F1", "ff0000", "extra"],
         ] {
-            assert!(matches!(
-                parse_arguments(invalid),
-                Command::UsageError(_)
-            ));
+            assert!(matches!(parse_arguments(invalid), Command::UsageError(_)));
         }
     }
 
