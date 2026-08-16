@@ -5,13 +5,14 @@ members = [
     "crates/kd3b-effects",
     "apps/dpctl",
     "apps/kd3b-control/src-tauri",
+    "apps/kd3b-control-native",
     "tools/kd3b-capture",
 ]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
