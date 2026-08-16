@@ -218,9 +218,9 @@ fn render_breathing(primary: Rgb8, phase: f32) -> Rgb8 {
 }
 
 fn render_rain(config: &EffectConfig, key: Key, position: KeyPosition, phase: f32) -> Rgb8 {
-    let epoch = phase.floor() as i64;
+    let epoch_key = u64::from(phase.floor().to_bits());
     let local = fract01(phase);
-    let spawn = unit_hash(config.seed, u64::from(position.column), epoch as u64);
+    let spawn = unit_hash(config.seed, u64::from(position.column), epoch_key);
     if spawn > 0.34 {
         return Rgb8::default();
     }
@@ -228,13 +228,22 @@ fn render_rain(config: &EffectConfig, key: Key, position: KeyPosition, phase: f3
     let head_y = local * 1.45 - 0.2;
     let distance = (position.y - head_y).abs();
     let trail = pulse(distance, 0.22);
-    let twinkle = 0.65 + 0.35 * unit_hash(config.seed ^ 0xa55a, key.index() as u64, epoch as u64);
-    scale_color(mix(config.primary, config.secondary, 0.22), trail * twinkle)
+    let twinkle = 0.65
+        + 0.35
+            * unit_hash(
+                config.seed ^ 0xa55a,
+                u64::from(key.offset()),
+                epoch_key,
+            );
+    scale_color(
+        mix(config.primary, config.secondary, 0.22),
+        trail * twinkle,
+    )
 }
 
 fn render_fire(config: &EffectConfig, key: Key, position: KeyPosition, phase: f32) -> Rgb8 {
-    let frame_tick = (phase * 12.0).floor() as i64;
-    let noise = unit_hash(config.seed, key.index() as u64, frame_tick as u64);
+    let tick_key = u64::from((phase * 12.0).floor().to_bits());
+    let noise = unit_hash(config.seed, u64::from(key.offset()), tick_key);
     let upward_heat = (1.0 - position.y * 0.78).clamp(0.0, 1.0);
     let flicker = (upward_heat * (0.45 + noise * 0.75)).clamp(0.0, 1.0);
     let hot = mix(
@@ -272,43 +281,70 @@ fn fract01(value: f32) -> f32 {
 }
 
 fn scale_color(color: Rgb8, factor: f32) -> Rgb8 {
-    let factor = factor.clamp(0.0, 1.0);
+    let level = quantize_unit(factor);
     Rgb8::new(
-        scale_channel(color.red, factor),
-        scale_channel(color.green, factor),
-        scale_channel(color.blue, factor),
+        scale_channel(color.red, level),
+        scale_channel(color.green, level),
+        scale_channel(color.blue, level),
     )
 }
 
-fn scale_channel(channel: u8, factor: f32) -> u8 {
-    (f32::from(channel) * factor).round().clamp(0.0, 255.0) as u8
+fn scale_channel(channel: u8, level: u8) -> u8 {
+    let scaled = (u16::from(channel) * u16::from(level) + 127) / 255;
+    u8::try_from(scaled).unwrap_or(u8::MAX)
 }
 
 fn mix(left: Rgb8, right: Rgb8, amount: f32) -> Rgb8 {
-    let amount = amount.clamp(0.0, 1.0);
-    let inverse = 1.0 - amount;
+    let right_level = quantize_unit(amount);
+    let left_level = u8::MAX - right_level;
     Rgb8::new(
-        (f32::from(left.red) * inverse + f32::from(right.red) * amount).round() as u8,
-        (f32::from(left.green) * inverse + f32::from(right.green) * amount).round() as u8,
-        (f32::from(left.blue) * inverse + f32::from(right.blue) * amount).round() as u8,
+        mix_channel(left.red, right.red, left_level, right_level),
+        mix_channel(left.green, right.green, left_level, right_level),
+        mix_channel(left.blue, right.blue, left_level, right_level),
     )
+}
+
+fn mix_channel(left: u8, right: u8, left_level: u8, right_level: u8) -> u8 {
+    let mixed = (u16::from(left) * u16::from(left_level)
+        + u16::from(right) * u16::from(right_level)
+        + 127)
+        / 255;
+    u8::try_from(mixed).unwrap_or(u8::MAX)
 }
 
 fn rainbow(hue: f32) -> Rgb8 {
     let hue = fract01(hue) * 6.0;
-    let sector = hue.floor() as u8;
-    let fraction = hue - f32::from(sector);
-    let rising = scale_channel(255, fraction);
-    let falling = 255_u8.saturating_sub(rising);
-
-    match sector {
-        0 => Rgb8::new(255, rising, 0),
-        1 => Rgb8::new(falling, 255, 0),
-        2 => Rgb8::new(0, 255, rising),
-        3 => Rgb8::new(0, falling, 255),
-        4 => Rgb8::new(rising, 0, 255),
-        _ => Rgb8::new(255, 0, falling),
+    if hue < 1.0 {
+        Rgb8::new(255, scale_channel(255, quantize_unit(hue)), 0)
+    } else if hue < 2.0 {
+        Rgb8::new(
+            scale_channel(255, quantize_unit(2.0 - hue)),
+            255,
+            0,
+        )
+    } else if hue < 3.0 {
+        Rgb8::new(0, 255, scale_channel(255, quantize_unit(hue - 2.0)))
+    } else if hue < 4.0 {
+        Rgb8::new(
+            0,
+            scale_channel(255, quantize_unit(4.0 - hue)),
+            255,
+        )
+    } else if hue < 5.0 {
+        Rgb8::new(scale_channel(255, quantize_unit(hue - 4.0)), 0, 255)
+    } else {
+        Rgb8::new(
+            255,
+            0,
+            scale_channel(255, quantize_unit(6.0 - hue)),
+        )
     }
+}
+
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+fn quantize_unit(value: f32) -> u8 {
+    // The clamp establishes the exact 0..=255 range before the deliberate quantization.
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
 fn unit_hash(seed: u64, a: u64, b: u64) -> f32 {
@@ -319,8 +355,8 @@ fn unit_hash(seed: u64, a: u64, b: u64) -> f32 {
     value ^= value >> 27;
     value = value.wrapping_mul(0x94d0_49bb_1331_11eb);
     value ^= value >> 31;
-    let upper = (value >> 40) as u32;
-    upper as f32 / 16_777_215.0
+    let upper = u16::try_from(value >> 48).unwrap_or(u16::MAX);
+    f32::from(upper) / f32::from(u16::MAX)
 }
 
 #[cfg(test)]
