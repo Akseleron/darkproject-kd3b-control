@@ -1,17 +1,25 @@
 const invoke = window.__TAURI__?.core?.invoke;
 
-const PREVIEW_INTERVAL_MS = 50;
+const PREVIEW_INTERVAL_MS = 1000 / 60;
 const HARDWARE_STATUS_INTERVAL_MS = 1000;
+const PROFILE_STORAGE_KEY = "kd3b-control.profiles.v1";
 
 const state = {
   layout: [],
   keyElements: [],
+  lightingMode: "effect",
   effect: "wave",
   primary: "#4080ff",
   secondary: "#ff3000",
   brightness: 100,
   speed: 1,
   direction: "forward",
+  directColor: "#4080ff",
+  directColors: [],
+  directInitialized: false,
+  directDirty: false,
+  selectedKeys: new Set(),
+  profiles: [],
   startedAt: performance.now(),
   previewInFlight: false,
   previewEnabled: true,
@@ -35,6 +43,7 @@ const primary = document.querySelector("#primary-color");
 const secondary = document.querySelector("#secondary-color");
 const brightness = document.querySelector("#brightness");
 const speed = document.querySelector("#speed");
+const directColor = document.querySelector("#direct-color");
 
 const VISUAL_LAYOUT = buildVisualLayout();
 
@@ -42,6 +51,9 @@ async function boot() {
   bindNavigation();
   bindControls();
   bindHardwareControls();
+  bindDirectEditor();
+  bindProfiles();
+
   if (!invoke) {
     setDeviceFailure("Tauri IPC недоступен. Запусти desktop-приложение, а не index.html напрямую.");
     frameStatus.textContent = "Tauri IPC недоступен";
@@ -55,8 +67,10 @@ async function boot() {
       invoke("get_effect_catalog"),
     ]);
     state.layout = layout;
+    state.directColors = Array(layout.length).fill("#000000");
     renderKeyboard(layout);
     renderEffects(effects);
+    loadProfiles();
     await Promise.all([refreshDevice(), refreshHardwareStatus()]);
     state.startedAt = performance.now();
     window.requestAnimationFrame(previewLoop);
@@ -67,6 +81,12 @@ async function boot() {
 }
 
 function bindNavigation() {
+  const titles = {
+    lighting: "Подсветка",
+    profiles: "Профили",
+    device: "Устройство",
+  };
+
   document.querySelectorAll(".nav-item[data-section]").forEach((button) => {
     button.addEventListener("click", () => {
       document.querySelectorAll(".nav-item[data-section]").forEach((item) => item.classList.remove("active"));
@@ -75,7 +95,7 @@ function bindNavigation() {
       state.activeSection = section;
       document.querySelectorAll(".section").forEach((item) => item.classList.remove("active"));
       document.querySelector(`#section-${section}`)?.classList.add("active");
-      document.querySelector("#page-title").textContent = section === "device" ? "Устройство" : "Подсветка";
+      document.querySelector("#page-title").textContent = titles[section] ?? "KD3B Control";
     });
   });
 
@@ -108,6 +128,50 @@ function bindControls() {
       button.classList.add("active");
       state.direction = button.dataset.direction;
     });
+  });
+  document.querySelectorAll("[data-lighting-mode]").forEach((button) => {
+    button.addEventListener("click", () => switchLightingMode(button.dataset.lightingMode));
+  });
+}
+
+function bindDirectEditor() {
+  keyboard.addEventListener("click", (event) => {
+    if (state.lightingMode !== "direct") return;
+    const key = event.target.closest(".key");
+    if (!key) return;
+    const index = Number(key.dataset.index);
+    if (!Number.isInteger(index)) return;
+    if (state.selectedKeys.has(index)) state.selectedKeys.delete(index);
+    else state.selectedKeys.add(index);
+    updateSelectionVisuals();
+  });
+
+  directColor.addEventListener("input", () => {
+    state.directColor = directColor.value;
+    document.querySelector("#direct-value").textContent = directColor.value;
+  });
+
+  document.querySelector("#fill-selection").addEventListener("click", () => {
+    if (!state.selectedKeys.size) {
+      document.querySelector("#selection-status").textContent = "Сначала выбери клавиши";
+      return;
+    }
+    for (const index of state.selectedKeys) {
+      if (index >= 0 && index < state.directColors.length) state.directColors[index] = state.directColor;
+    }
+    state.directDirty = true;
+    renderDirectFrame();
+  });
+
+  document.querySelectorAll("[data-key-group]").forEach((button) => {
+    button.addEventListener("click", () => selectKeyGroup(button.dataset.keyGroup));
+  });
+}
+
+function bindProfiles() {
+  document.querySelector("#save-profile").addEventListener("click", saveCurrentProfile);
+  document.querySelector("#profile-name").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") saveCurrentProfile();
   });
 }
 
@@ -219,16 +283,42 @@ function renderEffects(effects) {
   }
 }
 
+function switchLightingMode(mode) {
+  if (mode !== "effect" && mode !== "direct") return;
+  if (mode === "direct" && !state.directInitialized) {
+    if (state.lastFrame.length === state.layout.length) state.directColors = [...state.lastFrame];
+    state.directInitialized = true;
+    state.directDirty = true;
+  }
+
+  state.lightingMode = mode;
+  document.querySelectorAll("[data-lighting-mode]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.lightingMode === mode);
+  });
+  document.querySelector("#effect-editor").hidden = mode !== "effect";
+  document.querySelector("#direct-editor").hidden = mode !== "direct";
+  document.querySelector("#effect-parameters").hidden = mode !== "effect";
+  keyboard.classList.toggle("direct-edit", mode === "direct");
+
+  if (mode === "effect") {
+    state.startedAt = performance.now();
+    state.previewEnabled = true;
+  } else {
+    renderDirectFrame();
+  }
+  updateSelectionVisuals();
+  renderHardwareStatus(state.hardware);
+}
+
 function previewLoop(timestamp) {
   window.requestAnimationFrame(previewLoop);
 
-  if (
-    document.hidden ||
-    state.activeSection !== "lighting" ||
-    timestamp - state.previewLastAt < PREVIEW_INTERVAL_MS
-  ) {
+  if (document.hidden || state.activeSection !== "lighting") return;
+  if (state.lightingMode === "direct") {
+    if (state.directDirty) renderDirectFrame();
     return;
   }
+  if (timestamp - state.previewLastAt < PREVIEW_INTERVAL_MS) return;
 
   state.previewLastAt = timestamp;
   void updatePreview();
@@ -256,6 +346,14 @@ async function updatePreview() {
   }
 }
 
+function renderDirectFrame() {
+  if (state.directColors.length !== state.layout.length) return;
+  state.lastFrame = [...state.directColors];
+  applyFrame(state.directColors);
+  state.directDirty = false;
+  frameStatus.textContent = `direct · ${state.selectedKeys.size} выбрано`;
+}
+
 function effectRequest() {
   return {
     kind: state.effect,
@@ -265,6 +363,184 @@ function effectRequest() {
     brightnessPercent: state.brightness,
     direction: state.direction,
   };
+}
+
+function selectKeyGroup(group) {
+  const groups = {
+    wasd: ["W", "A", "S", "D"],
+    arrows: ["Up", "Down", "Left", "Right"],
+    function: Array.from({ length: 12 }, (_, index) => `F${index + 1}`),
+    navigation: ["Insert", "Home", "PageUp", "Delete", "End", "PageDown"],
+  };
+
+  state.selectedKeys.clear();
+  if (group === "all") {
+    state.layout.forEach((key) => state.selectedKeys.add(key.index));
+  } else if (group !== "none") {
+    const names = new Set(groups[group] ?? []);
+    state.layout.forEach((key) => {
+      if (names.has(key.name)) state.selectedKeys.add(key.index);
+    });
+  }
+  updateSelectionVisuals();
+}
+
+function updateSelectionVisuals() {
+  state.keyElements.forEach((element, index) => {
+    element?.classList.toggle("selected", state.lightingMode === "direct" && state.selectedKeys.has(index));
+  });
+  const status = document.querySelector("#selection-status");
+  if (status) status.textContent = `${state.selectedKeys.size} выбрано`;
+}
+
+function loadProfiles() {
+  try {
+    const raw = window.localStorage.getItem(PROFILE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    state.profiles = Array.isArray(parsed) ? parsed.filter(isValidProfile) : [];
+  } catch {
+    state.profiles = [];
+  }
+  renderProfiles();
+}
+
+function persistProfiles() {
+  window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(state.profiles));
+}
+
+function saveCurrentProfile() {
+  const input = document.querySelector("#profile-name");
+  const name = input.value.trim();
+  if (!name) {
+    input.focus();
+    input.placeholder = "Введи название профиля";
+    return;
+  }
+
+  const profile = {
+    version: 1,
+    name,
+    updatedAt: new Date().toISOString(),
+    lightingMode: state.lightingMode,
+    effect: state.effect,
+    primary: state.primary,
+    secondary: state.secondary,
+    brightness: state.brightness,
+    speed: state.speed,
+    direction: state.direction,
+    directColor: state.directColor,
+    directColors: [...state.directColors],
+  };
+
+  const existing = state.profiles.findIndex((item) => item.name === name);
+  if (existing >= 0) state.profiles[existing] = profile;
+  else state.profiles.push(profile);
+  state.profiles.sort((left, right) => left.name.localeCompare(right.name, "ru"));
+  persistProfiles();
+  renderProfiles();
+  input.value = "";
+}
+
+function loadProfile(profile) {
+  state.effect = profile.effect;
+  state.primary = profile.primary;
+  state.secondary = profile.secondary;
+  state.brightness = profile.brightness;
+  state.speed = profile.speed;
+  state.direction = profile.direction;
+  state.directColor = profile.directColor;
+  if (profile.directColors.length === state.layout.length) {
+    state.directColors = [...profile.directColors];
+    state.directInitialized = true;
+    state.directDirty = true;
+  }
+  syncControlsFromState();
+  switchLightingMode(profile.lightingMode);
+}
+
+function deleteProfile(name) {
+  state.profiles = state.profiles.filter((profile) => profile.name !== name);
+  persistProfiles();
+  renderProfiles();
+}
+
+function renderProfiles() {
+  const list = document.querySelector("#profile-list");
+  if (!list) return;
+  list.replaceChildren();
+
+  if (!state.profiles.length) {
+    const empty = document.createElement("div");
+    empty.className = "profile-empty";
+    empty.textContent = "Host-профилей пока нет. Настрой подсветку и сохрани текущее состояние.";
+    list.append(empty);
+    return;
+  }
+
+  for (const profile of state.profiles) {
+    const card = document.createElement("article");
+    card.className = "profile-item";
+    const info = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = profile.name;
+    const meta = document.createElement("span");
+    meta.textContent = profile.lightingMode === "direct"
+      ? "Direct RGB · 87-key frame"
+      : `${profile.effect} · ${profile.brightness}% · ${profile.speed.toFixed(2)}×`;
+    info.append(title, meta);
+
+    const actions = document.createElement("div");
+    actions.className = "profile-actions";
+    const load = document.createElement("button");
+    load.type = "button";
+    load.className = "profile-button primary";
+    load.textContent = "Загрузить";
+    load.addEventListener("click", () => loadProfile(profile));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "profile-button";
+    remove.textContent = "Удалить";
+    remove.addEventListener("click", () => deleteProfile(profile.name));
+    actions.append(load, remove);
+    card.append(info, actions);
+    list.append(card);
+  }
+}
+
+function isValidProfile(profile) {
+  return Boolean(
+    profile &&
+    profile.version === 1 &&
+    typeof profile.name === "string" &&
+    (profile.lightingMode === "effect" || profile.lightingMode === "direct") &&
+    typeof profile.effect === "string" &&
+    typeof profile.primary === "string" &&
+    typeof profile.secondary === "string" &&
+    Number.isFinite(profile.brightness) &&
+    Number.isFinite(profile.speed) &&
+    (profile.direction === "forward" || profile.direction === "reverse") &&
+    typeof profile.directColor === "string" &&
+    Array.isArray(profile.directColors)
+  );
+}
+
+function syncControlsFromState() {
+  primary.value = state.primary;
+  secondary.value = state.secondary;
+  brightness.value = String(state.brightness);
+  speed.value = String(Math.round(state.speed * 100));
+  directColor.value = state.directColor;
+  document.querySelector("#primary-value").textContent = state.primary;
+  document.querySelector("#secondary-value").textContent = state.secondary;
+  document.querySelector("#brightness-value").textContent = `${state.brightness}%`;
+  document.querySelector("#speed-value").textContent = `${state.speed.toFixed(2)}×`;
+  document.querySelector("#direct-value").textContent = state.directColor;
+  document.querySelectorAll("[data-direction]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.direction === state.direction);
+  });
+  effectGrid.querySelectorAll(".effect-button").forEach((button) => {
+    button.classList.toggle("active", button.dataset.effect === state.effect);
+  });
 }
 
 async function armHardwareOutput() {
@@ -292,6 +568,7 @@ async function disarmHardwareOutput() {
 }
 
 async function startHardwareEffect() {
+  if (state.lightingMode !== "effect") return;
   try {
     const status = await invoke("start_effect_output", { request: effectRequest() });
     renderHardwareStatus(status);
@@ -372,7 +649,7 @@ function renderHardwareStatus(status) {
   const canWrite = Boolean(status.armed && state.deviceReady);
   document.querySelector("#arm-hardware").disabled = Boolean(status.armed);
   document.querySelector("#disarm-hardware").disabled = !status.armed;
-  document.querySelector("#start-hardware").disabled = !canWrite;
+  document.querySelector("#start-hardware").disabled = !canWrite || state.lightingMode !== "effect";
   document.querySelector("#stop-hardware").disabled = !status.running;
   document.querySelector("#apply-frame").disabled = !canWrite || state.lastFrame.length !== state.layout.length;
   document.querySelector("#blackout-hardware").disabled = !canWrite;
