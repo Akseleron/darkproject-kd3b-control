@@ -1,11 +1,6 @@
 #[cfg(target_os = "linux")]
 fn apply_linux_webkit_workarounds() {
-    use std::{
-        env,
-        os::unix::process::CommandExt,
-        path::Path,
-        process::Command,
-    };
+    use std::{env, os::unix::process::CommandExt, path::Path, process::Command};
 
     const WEBKIT_DMABUF_FLAG: &str = "WEBKIT_DISABLE_DMABUF_RENDERER";
 
