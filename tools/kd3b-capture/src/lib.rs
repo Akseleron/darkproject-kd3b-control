@@ -409,7 +409,7 @@ fn validate_block(
             "block length is smaller than 12",
         ));
     }
-    if total_length % 4 != 0 {
+    if !total_length.is_multiple_of(4) {
         return Err(ParseError::new(
             offset + 4,
             "block length is not aligned to 32 bits",
