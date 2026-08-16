@@ -49,9 +49,44 @@ Observed:
 
 OpenRGB's exact-device detector additionally targets interface `2`, usage page `0xFFC2`, usage `4` for this VID/PID.
 
-The relationship between the USB-level 64-byte OUT endpoint and the 256-byte HIDAPI writes used by OpenRGB must be verified on Linux before the first hardware write. Do not assume the transport backend or report framing.
+The relationship between the USB-level 64-byte OUT endpoint and the 256-byte HIDAPI writes used by OpenRGB must still be verified before the first hardware write. Do not assume report framing or that a 256-byte application write maps directly to one USB transaction.
 
-Status of that relationship: **UNKNOWN / first Phase-1 transport task**.
+### Live Phase-1 open/drop validation
+
+On 2026-08-16, the target CachyOS host ran:
+
+```text
+cargo run -p dpctl -- probe
+```
+
+The probe enumerated the target as:
+
+```text
+Interface: 2
+VID:PID: 195d:2061
+Product: Turing Gaming Keyboard
+Manufacturer: Turing Gaming Keyboard
+Serial: <unavailable>
+Release: 0x3131
+Bus: usb
+Path: 1-11:1.2
+```
+
+After the user manually entered the exact confirmation phrase `OPEN INTERFACE 2`, the process completed successfully with exit code `0` and reported:
+
+```text
+No HID report read/write/feature operation was requested.
+```
+
+This confirms only that the selected interface-2 raw HIDAPI path could be opened successfully with the pinned Linux static-libusb HIDAPI backend and that the returned handle could then be dropped. The application did not request any HID report read, write, feature-report, report-descriptor, RGB, or configuration operation during this probe.
+
+HIDAPI/libusb may internally rescan, path-match, open, claim/release an interface, detach/reattach a kernel driver where applicable, or establish backend-managed interrupt-IN activity where applicable. The successful probe is not evidence that every such backend effect occurred in this run.
+
+The following remain **UNKNOWN** until a separately gated hardware-write test:
+
+- whether a 256-byte HIDAPI write succeeds on this interface/backend;
+- how that write is framed at the USB transfer level;
+- whether the documented two-packet direct-RGB sequence behaves as expected on this exact Linux path.
 
 ## udev state used during research
 
