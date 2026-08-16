@@ -1,0 +1,27 @@
+[package]
+name = "kd3b-control"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "kd3b_control_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "kd3b-control"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kd3b-device = { path = "../../../crates/kd3b-device" }
+kd3b-effects = { path = "../../../crates/kd3b-effects" }
+kd3b-protocol = { path = "../../../crates/kd3b-protocol" }
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+
+[lints]
+workspace = true

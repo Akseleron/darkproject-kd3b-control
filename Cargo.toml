@@ -4,6 +4,7 @@ members = [
     "crates/kd3b-device",
     "crates/kd3b-effects",
     "apps/dpctl",
+    "apps/kd3b-control/src-tauri",
     "tools/kd3b-capture",
 ]
 resolver = "2"

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>KD3B Control</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">K3</div>
+        <div>
+          <strong>KD3B Control</strong>
+          <span>Dark Project rev.2</span>
+        </div>
+      </div>
+
+      <nav class="nav-list" aria-label="Разделы">
+        <button class="nav-item active" type="button" data-section="lighting">
+          <span class="nav-icon">◈</span>
+          <span>Подсветка</span>
+        </button>
+        <button class="nav-item" type="button" data-section="device">
+          <span class="nav-icon">⌁</span>
+          <span>Устройство</span>
+        </button>
+        <button class="nav-item disabled" type="button" disabled title="Будет добавлено после стабилизации профилей">
+          <span class="nav-icon">◇</span>
+          <span>Профили</span>
+          <small>позже</small>
+        </button>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+
+      <section class="device-card" id="device-card">
+        <div class="device-card-head">
+          <span class="status-dot pending" id="device-dot"></span>
+          <span id="device-title">Проверка устройства…</span>
+        </div>
+        <div class="device-card-detail" id="device-detail">Читаем только HID metadata.</div>
+      </section>
+
+      <div class="build-note">Preview build · hardware write disabled</div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">KD3B REV.2 · 195D:2061</div>
+          <h1 id="page-title">Подсветка</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="mode-badge">VOLATILE RGB</span>
+          <button class="ghost-button" type="button" id="refresh-device">Обновить устройство</button>
+        </div>
+      </header>
+
+      <section class="section active" id="section-lighting">
+        <div class="preview-panel">
+          <div class="panel-heading">
+            <div>
+              <span class="panel-kicker">LIVE PREVIEW</span>
+              <h2>Клавиатура</h2>
+            </div>
+            <div class="preview-meta">
+              <span id="fps-label">20 FPS preview</span>
+              <span class="preview-chip">Rust renderer</span>
+            </div>
+          </div>
+
+          <div class="keyboard-stage">
+            <div class="keyboard-glow"></div>
+            <div class="keyboard" id="keyboard" aria-label="Предпросмотр раскладки KD3B"></div>
+          </div>
+
+          <div class="preview-footer">
+            <span>Предпросмотр рассчитывается <code>kd3b-effects</code> и не открывает HID transport.</span>
+            <span id="frame-status">Ожидание движка…</span>
+          </div>
+        </div>
+
+        <div class="control-layout">
+          <section class="control-panel effect-panel">
+            <div class="panel-heading compact">
+              <div>
+                <span class="panel-kicker">EFFECT</span>
+                <h2>Эффект</h2>
+              </div>
+            </div>
+            <div class="effect-grid" id="effect-grid"></div>
+          </section>
+
+          <section class="control-panel settings-panel">
+            <div class="panel-heading compact">
+              <div>
+                <span class="panel-kicker">PARAMETERS</span>
+                <h2>Параметры</h2>
+              </div>
+            </div>
+
+            <div class="setting-row color-row">
+              <div>
+                <label for="primary-color">Основной цвет</label>
+                <span id="primary-value">#4080ff</span>
+              </div>
+              <input id="primary-color" type="color" value="#4080ff" />
+            </div>
+
+            <div class="setting-row color-row">
+              <div>
+                <label for="secondary-color">Вторичный цвет</label>
+                <span id="secondary-value">#ff3000</span>
+              </div>
+              <input id="secondary-color" type="color" value="#ff3000" />
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-header">
+                <label for="brightness">Яркость</label>
+                <output id="brightness-value">100%</output>
+              </div>
+              <input id="brightness" type="range" min="0" max="100" value="100" />
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-header">
+                <label for="speed">Скорость</label>
+                <output id="speed-value">1.00×</output>
+              </div>
+              <input id="speed" type="range" min="5" max="300" value="100" />
+            </div>
+
+            <div class="setting-block">
+              <div class="setting-header"><span>Направление</span></div>
+              <div class="segmented" role="group" aria-label="Направление эффекта">
+                <button class="segment active" type="button" data-direction="forward">Вперёд</button>
+                <button class="segment" type="button" data-direction="reverse">Назад</button>
+              </div>
+            </div>
+
+            <div class="hardware-boundary">
+              <strong>Запись в клавиатуру отключена</strong>
+              <p>Эта сборка показывает новый движок эффектов без дополнительных HID-записей. Аппаратный стриминг будет включён отдельным подтверждённым этапом.</p>
+              <button type="button" disabled>Применить к клавиатуре</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="section" id="section-device">
+        <div class="device-page-card">
+          <span class="panel-kicker">READ-ONLY STATUS</span>
+          <h2>Подключение KD3B</h2>
+          <div class="device-summary" id="device-summary"></div>
+          <div class="boundary-note">
+            <strong>Что делает эта страница</strong>
+            <p>Только перечисляет HID metadata и проверяет однозначность interface 2. Открытие transport, чтение report и запись RGB здесь не выполняются.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

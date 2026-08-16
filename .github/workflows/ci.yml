@@ -12,16 +12,26 @@ permissions:
 
 jobs:
   rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Install libusb development package
+      - name: Install Linux development packages
         run: |
           sudo apt-get update
-          sudo apt-get install --yes libusb-1.0-0-dev
+          sudo apt-get install --yes \
+            libusb-1.0-0-dev \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
