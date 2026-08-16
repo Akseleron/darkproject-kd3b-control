@@ -128,6 +128,8 @@ impl HardwareController {
     }
 }
 
+// Tauri's command argument extractor owns this lightweight state guard by design.
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub(crate) fn arm_hardware_output(
     controller: State<'_, HardwareController>,
@@ -147,6 +149,7 @@ pub(crate) fn arm_hardware_output(
     controller.status()
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub(crate) fn disarm_hardware_output(
     controller: State<'_, HardwareController>,
@@ -156,6 +159,7 @@ pub(crate) fn disarm_hardware_output(
     controller.status()
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub(crate) fn get_hardware_output_status(
     controller: State<'_, HardwareController>,
@@ -163,6 +167,7 @@ pub(crate) fn get_hardware_output_status(
     controller.status()
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub(crate) fn apply_static_frame(
     controller: State<'_, HardwareController>,
@@ -197,6 +202,7 @@ pub(crate) fn apply_static_frame(
     controller.status()
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub(crate) fn start_effect_output(
     controller: State<'_, HardwareController>,
@@ -211,7 +217,7 @@ pub(crate) fn start_effect_output(
     let shared = Arc::clone(&controller.shared);
     let join = thread::Builder::new()
         .name("kd3b-rgb-worker".to_owned())
-        .spawn(move || run_effect_worker(shared, worker_stop, config))
+        .spawn(move || run_effect_worker(shared.as_ref(), worker_stop.as_ref(), config))
         .map_err(|error| format!("failed to start hardware effect worker: {error}"))?;
 
     let mut worker_slot = controller
@@ -224,6 +230,7 @@ pub(crate) fn start_effect_output(
     controller.status()
 }
 
+#[allow(clippy::needless_pass_by_value)]
 #[tauri::command]
 pub(crate) fn stop_effect_output(
     controller: State<'_, HardwareController>,
@@ -270,12 +277,12 @@ fn parse_frame(colors: Vec<String>) -> Result<[Rgb8; LOGICAL_KEY_COUNT], String>
     Ok(frame)
 }
 
-fn run_effect_worker(shared: Arc<SharedState>, stop: Arc<AtomicBool>, config: EffectConfig) {
+fn run_effect_worker(shared: &SharedState, stop: &AtomicBool, config: EffectConfig) {
     let mut transport = match open_configuration_interface_transport() {
         Ok(transport) => transport,
         Err(error) => {
             record_worker_error(
-                &shared,
+                shared,
                 format!("failed to open configuration interface: {error}"),
             );
             return;
@@ -284,7 +291,7 @@ fn run_effect_worker(shared: Arc<SharedState>, stop: Arc<AtomicBool>, config: Ef
 
     let selected = transport.selected_metadata().clone();
     update_worker_runtime(
-        &shared,
+        shared,
         true,
         format!(
             "streaming volatile RGB to interface {} at {}",
@@ -300,17 +307,17 @@ fn run_effect_worker(shared: Arc<SharedState>, stop: Arc<AtomicBool>, config: Ef
         let frame = render(&config, FrameContext::new(started.elapsed().as_secs_f32()));
         if previous.as_ref() != Some(&frame) {
             if let Err(error) = transport.set_direct_rgb(&frame) {
-                record_worker_error(&shared, format!("hardware RGB stream stopped: {error}"));
+                record_worker_error(shared, format!("hardware RGB stream stopped: {error}"));
                 return;
             }
             previous = Some(frame);
-            increment_written_frames(&shared);
+            increment_written_frames(shared);
         }
         thread::sleep(FRAME_INTERVAL);
     }
 
     update_worker_runtime(
-        &shared,
+        shared,
         false,
         "hardware effect worker stopped cleanly".to_owned(),
         None,
